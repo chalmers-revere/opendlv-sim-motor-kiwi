@@ -67,11 +67,16 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
     groundSteeringAngleCopy = m_groundSteeringAngle;
     pedalPositionCopy = m_pedalPosition;
   }
-  
-  double const slipAngleFront = groundSteeringAngleCopy - std::atan(
-      (m_lateralSpeed + frontToCog * m_yawRate) / std::abs(m_longitudinalSpeed));
-  double const slipAngleRear = -std::atan((m_lateralSpeed - rearToCog * m_yawRate) / 
-      std::abs(m_longitudinalSpeed));
+
+
+  double slipAngleFront = 0.0;
+  double slipAngleRear = 0.0;
+  if (std::abs(m_longitudinalSpeed) > 0.001) {
+    slipAngleFront = groundSteeringAngleCopy - std::atan(
+        (m_lateralSpeed + frontToCog * m_yawRate) / std::abs(m_longitudinalSpeed));
+    slipAngleRear = -std::atan((m_lateralSpeed - rearToCog * m_yawRate) / 
+        std::abs(m_longitudinalSpeed));
+  }
 
   double const forceFrontZ = mass * g * (frontToCog / (frontToCog + length));
   double const forceRearZ = mass * g * (length / (frontToCog + length));
