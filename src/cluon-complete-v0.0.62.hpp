@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Thu, 22 Mar 2018 23:08:46 +0100
-// Version: 0.0.55
+// Date: Wed, 04 Apr 2018 12:20:50 +0200
+// Version: 0.0.62
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -4256,12 +4256,16 @@ inline cluon::data::TimeStamp now() noexcept {
         #define ssize_t long
     #endif
 
+    // Disable warning "'<': signed/unsigned mismatch".
+    #pragma warning(disable : 4018)
     // Disable warning "Unary minus operator applied to unsigned type, result still unsigned".
     #pragma warning(disable : 4146)
     // Disable warning "Possible loss of precision".
     #pragma warning(disable : 4244)
     // Disable warning "Conversion from 'size_t' to 'type', possible loss of data".
     #pragma warning(disable : 4267)
+    // Disable warning "'static_cast': truncation of constant value".
+    #pragma warning(disable : 4309)
     // Disable warning "'operator ""s': literal suffix identifiers that do not start with an underscore are reserved".
     #pragma warning(disable : 4455)
     // Disable deprecated API warnings.
@@ -4967,9 +4971,9 @@ class LIBCLUON_API TCPConnection {
      * @param connectionLostDelegate Functional (noexcept) to handle a lost connection.
      */
     TCPConnection(const std::string &address,
-                uint16_t port,
-                std::function<void(std::string &&, std::chrono::system_clock::time_point &&)> newDataDelegate,
-                std::function<void()> connectionLostDelegate) noexcept;
+                  uint16_t port,
+                  std::function<void(std::string &&, std::chrono::system_clock::time_point &&)> newDataDelegate,
+                  std::function<void()> connectionLostDelegate) noexcept;
     ~TCPConnection() noexcept;
 
     /**
@@ -5562,7 +5566,7 @@ class LIBCLUON_API FromMsgPackVisitor {
     /**
      * Internal constructor to pass reference to preset key/values.
      *
-     * @param preset Pre-filled key/value map to handled nested fields.
+     * @param preset Pre-filled key/value map to handle nested fields.
      */
     FromMsgPackVisitor(std::map<std::string, FromMsgPackVisitor::MsgPackKeyValue> &preset) noexcept;
 
@@ -5572,7 +5576,7 @@ class LIBCLUON_API FromMsgPackVisitor {
 
    public:
     /**
-     * This method decodes a given istream into Proto.
+     * This method decodes a given istream into an internal key/value representation.
      *
      * @param in istream to decode.
      */
@@ -5625,6 +5629,169 @@ class LIBCLUON_API FromMsgPackVisitor {
    private:
     std::map<std::string, FromMsgPackVisitor::MsgPackKeyValue> m_data{};
     std::map<std::string, FromMsgPackVisitor::MsgPackKeyValue> &m_keyValues;
+};
+} // namespace cluon
+
+#endif
+/*
+ * Copyright (C) 2018  Christian Berger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef JSONCONSTANTS_HPP
+#define JSONCONSTANTS_HPP
+
+#include <cstdint>
+
+// clang-format off
+namespace cluon {
+    enum class JSONConstants : uint16_t {
+        IS_FALSE    = 0,
+        IS_TRUE     = 1,
+        NUMBER      = 2,
+        STRING      = 3,
+        OBJECT      = 4, // Indicating nested types.
+        UNDEFINED   = 99,
+   };
+}
+// clang-format on
+
+#endif
+/*
+ * Copyright (C) 2018  Christian Berger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef FROMJSONVISITOR_HPP
+#define FROMJSONVISITOR_HPP
+
+//#include "cluon/JSONConstants.hpp"
+//#include "cluon/any/any.hpp"
+//#include "cluon/cluon.hpp"
+
+#include <cstdint>
+#include <istream>
+#include <map>
+#include <string>
+
+namespace cluon {
+/**
+This class decodes a given message from JSON format.
+*/
+class LIBCLUON_API FromJSONVisitor {
+    /**
+     * This class represents a key/value in a JSON list of key/values.
+     */
+    class JSONKeyValue {
+       private:
+        JSONKeyValue &operator=(JSONKeyValue &&) = delete;
+
+       public:
+        JSONKeyValue()                        = default;
+        JSONKeyValue(const JSONKeyValue &) = default;
+        JSONKeyValue(JSONKeyValue &&)      = default;
+        JSONKeyValue &operator=(const JSONKeyValue &) = default;
+        ~JSONKeyValue()                                  = default;
+
+       public:
+        std::string m_key{""};
+        JSONConstants m_type{JSONConstants::UNDEFINED};
+        linb::any m_value;
+    };
+
+   private:
+    FromJSONVisitor(const FromJSONVisitor &) = delete;
+    FromJSONVisitor(FromJSONVisitor &&)      = delete;
+    FromJSONVisitor &operator=(FromJSONVisitor &&) = delete;
+    FromJSONVisitor &operator=(const FromJSONVisitor &other) = delete;
+
+    /**
+     * Internal constructor to pass reference to preset key/values.
+     *
+     * @param preset Pre-filled key/value map to handle nested fields.
+     */
+    FromJSONVisitor(std::map<std::string, FromJSONVisitor::JSONKeyValue> &preset) noexcept;
+
+   public:
+    FromJSONVisitor() noexcept;
+    ~FromJSONVisitor() = default;
+
+   public:
+    /**
+     * This method decodes a given istream into an internal key/value representation.
+     *
+     * @param in istream to decode.
+     */
+    void decodeFrom(std::istream &in) noexcept;
+
+   public:
+    // The following methods are provided to allow an instance of this class to
+    // be used as visitor for an instance with the method signature void accept<T>(T&);
+
+    void preVisit(int32_t id, const std::string &shortName, const std::string &longName) noexcept;
+    void postVisit() noexcept;
+
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, bool &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, char &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, int8_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, uint8_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, int16_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, uint16_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, int32_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, uint32_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, int64_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, uint64_t &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, float &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, double &v) noexcept;
+    void visit(uint32_t id, std::string &&typeName, std::string &&name, std::string &v) noexcept;
+
+    template <typename T>
+    void visit(uint32_t &id, std::string &&typeName, std::string &&name, T &value) noexcept {
+        (void)id;
+        (void)typeName;
+
+        if (0 < m_keyValues.count(name)) {
+            try {
+                std::map<std::string, FromJSONVisitor::JSONKeyValue> v
+                    = linb::any_cast<std::map<std::string, FromJSONVisitor::JSONKeyValue>>(m_keyValues[name].m_value);
+                cluon::FromJSONVisitor nestedJSONDecoder(v);
+                value.accept(nestedJSONDecoder);
+            } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+            }
+        }
+    }
+
+   private:
+    std::string decodeBase64(const std::string &input) const noexcept;
+    std::map<std::string, FromJSONVisitor::JSONKeyValue> readKeyValues(std::string &input) noexcept;
+
+   private:
+    std::map<std::string, FromJSONVisitor::JSONKeyValue> m_data{};
+    std::map<std::string, FromJSONVisitor::JSONKeyValue> &m_keyValues;
 };
 } // namespace cluon
 
@@ -6276,8 +6443,8 @@ class LIBCLUON_API EnvelopeToJSON {
 //#include "cluon/ToProtoVisitor.hpp"
 //#include "cluon/cluonDataStructures.hpp"
 
-#include <cstring>
 #include <array>
+#include <cstring>
 #include <istream>
 #include <sstream>
 #include <string>
@@ -7029,12 +7196,19 @@ class LIBCLUON_API LCMToGenericMessage {
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <map>
+#include <mutex>
 #include <string>
 #include <utility>
 
 namespace cluon {
 /**
-This class provides an interface to an OpenDaVINCI v4 session:
+This class provides an interface to an OpenDaVINCI v4 session. An OpenDaVINCI
+v4 session allows the automatic exchange of time-stamped Envelopes carrying
+user-defined messages usually using UDP multicast.
+
+There are two ways to participate in an OpenDaVINCI session. Variant A is simply
+calling a user-supplied lambda whenever a new Envelope is received:
 
 \code{.cpp}
 cluon::OD4Session od4{111, [](cluon::data::Envelope &&envelope){ std::cout << "Received cluon::Envelope" << std::endl;}
@@ -7044,6 +7218,34 @@ cluon::OD4Session od4{111, [](cluon::data::Envelope &&envelope){ std::cout << "R
 
 MyMessage msg;
 od4.send(msg);
+\endcode
+
+Variant B allows a more fine-grained setup where you specify the Envelopes of interest:
+
+\code{.cpp}
+cluon::OD4Session od4{111};
+
+od4.dataTrigger(cluon::data::TimeStamp::ID(), [](cluon::data::Envelope &&envelope){ std::cout << "Received cluon::data::TimeStamp" << std::endl;});
+od4.dataTrigger(MyMessage::ID(), [](cluon::data::Envelope &&envelope){ std::cout << "Received MyMessage" << std::endl;});
+
+// Do something in parallel.
+
+MyMessage msg;
+od4.send(msg);
+\endcode
+
+Next to receive Envelopes, OD4Session can call a user-supplied lambda in a time-triggered
+way. The lambda is executed as long as it does not return false or throws an exception
+that is then caught in the method timeTrigger and the method is exited:
+
+\code{.cpp}
+cluon::OD4Session od4{111};
+
+const float FREQ{10}; // 10 Hz.
+od4.timeTrigger(FREQ, [](){
+  // Do something time-triggered.
+  return false;
+}); // This call blocks until the lambda returns false.
 \endcode
 */
 class LIBCLUON_API OD4Session {
@@ -7058,7 +7260,10 @@ class LIBCLUON_API OD4Session {
      * Constructor.
      *
      * @param CID OpenDaVINCI v4 session identifier [1 .. 254]
-     * @param delegate Function to call on newly arriving Envelopes.
+     * @param delegate Function to call on newly arriving Envelopes ("catch-all");
+     *        if a nullptr is passed, the method dataTrigger can be used to set
+     *        message specific delegates. Please note that it is NOT possible
+     *        to have both: a delegate for "catch-all" and the data-triggered ones.
      */
     OD4Session(uint16_t CID, std::function<void(cluon::data::Envelope &&envelope)> delegate = nullptr) noexcept;
 
@@ -7068,6 +7273,28 @@ class LIBCLUON_API OD4Session {
      * @param envelope to be sent.
      */
     void send(cluon::data::Envelope &&envelope) noexcept;
+
+    /**
+     * This method sets a delegate to be called data-triggered on arrival
+     * of a new Envelope for a given message identifier.
+     *
+     * @param messageIdentifier Message identifier to assign a delegate.
+     * @param delegate Function to call on newly arriving Envelopes; setting it to nullptr will erase it.
+     * @return true if the given delegate could be successfully set or unset.
+     */
+    bool dataTrigger(int32_t messageIdentifier, std::function<void(cluon::data::Envelope &&envelope)> delegate) noexcept;
+
+    /**
+     * This method sets a delegate to be called time-triggered using the
+     * specified frequency until the delegate returns false. This method
+     * blocks until the delegate has returned false or threw an exception.
+     * Thus, this method is typically called as last statement in a main
+     * function of a program.
+     *
+     * @param freq Frequency in Hertz to run the given delegate.
+     * @param delegate Function to call according to the given frequency.
+     */
+    void timeTrigger(float freq, std::function<bool()> delegate) noexcept;
 
     /**
      * This method will send a given message to this OpenDaVINCI v4 session.
@@ -7105,6 +7332,9 @@ class LIBCLUON_API OD4Session {
     cluon::UDPSender m_sender;
 
     std::function<void(cluon::data::Envelope &&envelope)> m_delegate{nullptr};
+
+    std::mutex m_mapOfDataTriggeredDelegatesMutex{};
+    std::map<int32_t, std::function<void(cluon::data::Envelope &&envelope)>> m_mapOfDataTriggeredDelegates{};
 };
 
 } // namespace cluon
@@ -7438,124 +7668,125 @@ inline std::pair<std::vector<MetaMessage>, MessageParser::MessageParserErrorCode
                                                                                       std::vector<std::string> &fieldNames,
                                                                                       std::vector<int32_t> &numericalMessageIdentifiers,
                                                                                       std::vector<int32_t> &numericalFieldIdentifiers) {
-        bool retVal = true;
-        // First, we need to visit the children of AST node MESSAGES_SPECIFICATION.
-        if ("MESSAGES_SPECIFICATION" == ast.name) {
-            for (const auto &node : ast.nodes) {
-                retVal &= checkForUniqueFieldNames(*node, prefix, messageNames, fieldNames, numericalMessageIdentifiers, numericalFieldIdentifiers);
-            }
-            // Try finding duplicated message identifiers.
-            if (retVal) {
-                std::sort(std::begin(numericalMessageIdentifiers), std::end(numericalMessageIdentifiers));
-                int32_t duplicatedMessageIdentifier{-1};
-                for (auto it{std::begin(numericalMessageIdentifiers)}; it != std::end(numericalMessageIdentifiers); it++) {
-                    if (it + 1 != std::end(numericalMessageIdentifiers)) {
-                        if (std::find(it + 1, std::end(numericalMessageIdentifiers), *it) != std::end(numericalMessageIdentifiers)) {
-                            duplicatedMessageIdentifier = *it;
+            bool retVal = true;
+            // First, we need to visit the children of AST node MESSAGES_SPECIFICATION.
+            if ("MESSAGES_SPECIFICATION" == ast.name) {
+                for (const auto &node : ast.nodes) {
+                    retVal &= checkForUniqueFieldNames(*node, prefix, messageNames, fieldNames, numericalMessageIdentifiers, numericalFieldIdentifiers);
+                }
+                // Try finding duplicated message identifiers.
+                if (retVal) {
+                    std::sort(std::begin(numericalMessageIdentifiers), std::end(numericalMessageIdentifiers));
+                    int32_t duplicatedMessageIdentifier{-1};
+                    for (auto it{std::begin(numericalMessageIdentifiers)}; it != std::end(numericalMessageIdentifiers); it++) {
+                        if (it + 1 != std::end(numericalMessageIdentifiers)) {
+                            if (std::find(it + 1, std::end(numericalMessageIdentifiers), *it) != std::end(numericalMessageIdentifiers)) {
+                                duplicatedMessageIdentifier = *it;
+                            }
                         }
                     }
-                }
-                retVal &= (-1 == duplicatedMessageIdentifier);
-                if (!retVal) {
-                    std::cerr << "[cluon::MessageParser] Found duplicated numerical message identifier: " << duplicatedMessageIdentifier << '\n';
-                }
-            }
-            // Try finding duplicated message names.
-            if (retVal) {
-                std::sort(std::begin(messageNames), std::end(messageNames));
-                std::string duplicatedMessageName;
-                for (auto it{std::begin(messageNames)}; it != std::end(messageNames); it++) {
-                    if (it + 1 != std::end(messageNames)) {
-                        if (std::find(it + 1, std::end(messageNames), *it) != std::end(messageNames)) {
-                            duplicatedMessageName = *it;
-                        }
+                    retVal &= (-1 == duplicatedMessageIdentifier);
+                    if (!retVal) {
+                        std::cerr << "[cluon::MessageParser] Found duplicated numerical message identifier: " << duplicatedMessageIdentifier << '\n';
                     }
                 }
-                retVal &= (duplicatedMessageName.empty());
-                if (!retVal) {
-                    std::cerr << "[cluon::MessageParser] Found duplicated message name '" << duplicatedMessageName << "'" << '\n';
+                // Try finding duplicated message names.
+                if (retVal) {
+                    std::sort(std::begin(messageNames), std::end(messageNames));
+                    std::string duplicatedMessageName;
+                    for (auto it{std::begin(messageNames)}; it != std::end(messageNames); it++) {
+                        if (it + 1 != std::end(messageNames)) {
+                            if (std::find(it + 1, std::end(messageNames), *it) != std::end(messageNames)) {
+                                duplicatedMessageName = *it;
+                            }
+                        }
+                    }
+                    retVal &= (duplicatedMessageName.empty());
+                    if (!retVal) {
+                        std::cerr << "[cluon::MessageParser] Found duplicated message name '" << duplicatedMessageName << "'" << '\n';
+                    }
                 }
             }
-        }
-        // Second, we need to visit the children of AST node MESSAGE_DECLARATION.
-        if ("MESSAGE_DECLARATION" == ast.name) {
-            fieldNames.clear();
-            numericalFieldIdentifiers.clear();
-            prefix = "";
-            retVal = true;
+            // Second, we need to visit the children of AST node MESSAGE_DECLARATION.
+            if ("MESSAGE_DECLARATION" == ast.name) {
+                fieldNames.clear();
+                numericalFieldIdentifiers.clear();
+                prefix = "";
+                retVal = true;
 
-            for (const auto &node : ast.nodes) {
-                if ("MESSAGE_IDENTIFIER" == node->name) {
-                    prefix = node->token;
-                    messageNames.push_back(::stringtoolbox::trim(prefix));
-                } else if ("NATURAL_NUMBER" == node->name) {
-                    numericalMessageIdentifiers.push_back(std::stoi(node->token));
-                } else if ("PRIMITIVE_FIELD" == node->name) {
+                for (const auto &node : ast.nodes) {
+                    if ("MESSAGE_IDENTIFIER" == node->name) {
+                        prefix = node->token;
+                        messageNames.push_back(::stringtoolbox::trim(prefix));
+                    } else if ("NATURAL_NUMBER" == node->name) {
+                        numericalMessageIdentifiers.push_back(std::stoi(node->token));
+                    } else if ("PRIMITIVE_FIELD" == node->name) {
+                        retVal &= checkForUniqueFieldNames(*node, prefix, messageNames, fieldNames, numericalMessageIdentifiers, numericalFieldIdentifiers);
+                    }
+                }
+
+                // Try finding duplicated numerical field identifiers.
+                if (retVal) {
+                    std::sort(std::begin(numericalFieldIdentifiers), std::end(numericalFieldIdentifiers));
+                    int32_t duplicatedFieldIdentifier{-1};
+                    for (auto it{std::begin(numericalFieldIdentifiers)}; it != std::end(numericalFieldIdentifiers); it++) {
+                        if (it + 1 != std::end(numericalFieldIdentifiers)) {
+                            if (std::find(it + 1, std::end(numericalFieldIdentifiers), *it) != std::end(numericalFieldIdentifiers)) {
+                                duplicatedFieldIdentifier = *it;
+                            }
+                        }
+                    }
+                    retVal &= (-1 == duplicatedFieldIdentifier);
+                    if (!retVal) {
+                        std::cerr << "[cluon::MessageParser] Found duplicated numerical field identifier in message "
+                                  << "'" << ::stringtoolbox::trim(prefix) << "': " << duplicatedFieldIdentifier << '\n';
+                    }
+                }
+                // Try finding duplicated field names.
+                if (retVal) {
+                    std::sort(std::begin(fieldNames), std::end(fieldNames));
+                    std::string duplicatedFieldName;
+                    for (auto it{std::begin(fieldNames)}; it != std::end(fieldNames); it++) {
+                        if (it + 1 != std::end(fieldNames)) {
+                            if (std::find(it + 1, std::end(fieldNames), *it) != std::end(fieldNames)) {
+                                duplicatedFieldName = *it;
+                            }
+                        }
+                    }
+                    retVal &= (duplicatedFieldName.empty());
+                    if (!retVal) {
+                        std::cerr << "[cluon::MessageParser] Found duplicated field name in message '" << ::stringtoolbox::trim(prefix) << "': '"
+                                  << duplicatedFieldName << "'" << '\n';
+                    }
+                }
+            }
+            // Within AST node MESSAGE_DECLARATION, we have PRIMITIVE_FIELD from
+            // which we need to extract the field "token".
+            if (ast.name == "PRIMITIVE_FIELD") {
+                // Extract the value of entry "IDENTIFIER".
+                auto nodeIdentifier = std::find_if(std::begin(ast.nodes), std::end(ast.nodes), [](auto a) { return (a->name == "IDENTIFIER"); });
+                if (nodeIdentifier != std::end(ast.nodes)) {
+                    fieldNames.push_back((*nodeIdentifier)->token);
+                }
+
+                // Visit this node's children to check for duplicated numerical identifiers.
+                for (const auto &node : ast.nodes) {
                     retVal &= checkForUniqueFieldNames(*node, prefix, messageNames, fieldNames, numericalMessageIdentifiers, numericalFieldIdentifiers);
                 }
             }
-
-            // Try finding duplicated numerical field identifiers.
-            if (retVal) {
-                std::sort(std::begin(numericalFieldIdentifiers), std::end(numericalFieldIdentifiers));
-                int32_t duplicatedFieldIdentifier{-1};
-                for (auto it{std::begin(numericalFieldIdentifiers)}; it != std::end(numericalFieldIdentifiers); it++) {
-                    if (it + 1 != std::end(numericalFieldIdentifiers)) {
-                        if (std::find(it + 1, std::end(numericalFieldIdentifiers), *it) != std::end(numericalFieldIdentifiers)) {
-                            duplicatedFieldIdentifier = *it;
-                        }
-                    }
+            // Within AST node PRIMITIVE_FIELD, we have PRIMITIVE_FIELD_OPTIONS from
+            // which we need to extract the field "token".
+            if (ast.name == "PRIMITIVE_FIELD_OPTIONS") {
+                // Extract the value of entry "IDENTIFIER".
+                auto nodeNumericalFieldIdentifier
+                    = std::find_if(std::begin(ast.nodes), std::end(ast.nodes), [](auto a) { return (a->name == "NATURAL_NUMBER"); });
+                if (nodeNumericalFieldIdentifier != std::end(ast.nodes)) {
+                    numericalFieldIdentifiers.push_back(std::stoi((*nodeNumericalFieldIdentifier)->token));
                 }
-                retVal &= (-1 == duplicatedFieldIdentifier);
-                if (!retVal) {
-                    std::cerr << "[cluon::MessageParser] Found duplicated numerical field identifier in message "
-                              << "'" << ::stringtoolbox::trim(prefix) << "': " << duplicatedFieldIdentifier << '\n';
-                }
-            }
-            // Try finding duplicated field names.
-            if (retVal) {
-                std::sort(std::begin(fieldNames), std::end(fieldNames));
-                std::string duplicatedFieldName;
-                for (auto it{std::begin(fieldNames)}; it != std::end(fieldNames); it++) {
-                    if (it + 1 != std::end(fieldNames)) {
-                        if (std::find(it + 1, std::end(fieldNames), *it) != std::end(fieldNames)) {
-                            duplicatedFieldName = *it;
-                        }
-                    }
-                }
-                retVal &= (duplicatedFieldName.empty());
-                if (!retVal) {
-                    std::cerr << "[cluon::MessageParser] Found duplicated field name in message '" << ::stringtoolbox::trim(prefix) << "': '" << duplicatedFieldName
-                              << "'" << '\n';
-                }
-            }
-        }
-        // Within AST node MESSAGE_DECLARATION, we have PRIMITIVE_FIELD from
-        // which we need to extract the field "token".
-        if (ast.name == "PRIMITIVE_FIELD") {
-            // Extract the value of entry "IDENTIFIER".
-            auto nodeIdentifier = std::find_if(std::begin(ast.nodes), std::end(ast.nodes), [](auto a) { return (a->name == "IDENTIFIER"); });
-            if (nodeIdentifier != std::end(ast.nodes)) {
-                fieldNames.push_back((*nodeIdentifier)->token);
             }
 
-            // Visit this node's children to check for duplicated numerical identifiers.
-            for (const auto &node : ast.nodes) {
-                retVal &= checkForUniqueFieldNames(*node, prefix, messageNames, fieldNames, numericalMessageIdentifiers, numericalFieldIdentifiers);
-            }
-        }
-        // Within AST node PRIMITIVE_FIELD, we have PRIMITIVE_FIELD_OPTIONS from
-        // which we need to extract the field "token".
-        if (ast.name == "PRIMITIVE_FIELD_OPTIONS") {
-            // Extract the value of entry "IDENTIFIER".
-            auto nodeNumericalFieldIdentifier = std::find_if(std::begin(ast.nodes), std::end(ast.nodes), [](auto a) { return (a->name == "NATURAL_NUMBER"); });
-            if (nodeNumericalFieldIdentifier != std::end(ast.nodes)) {
-                numericalFieldIdentifiers.push_back(std::stoi((*nodeNumericalFieldIdentifier)->token));
-            }
-        }
-
-        return retVal;
-    };
+            return retVal;
+        };
 
     ////////////////////////////////////////////////////////////////////////////
 
@@ -7636,7 +7867,8 @@ inline std::pair<std::vector<MetaMessage>, MessageParser::MessageParserErrorCode
                           }
                           mf.fieldDataTypeName(::stringtoolbox::trim(_fieldDataType));
                           mf.fieldName(::stringtoolbox::trim(_fieldName));
-                          mf.fieldIdentifier((!_fieldIdentifier.empty() ? static_cast<uint32_t>(std::stoi(::stringtoolbox::trim(_fieldIdentifier))) : fieldIdentifierCounter));
+                          mf.fieldIdentifier(
+                              (!_fieldIdentifier.empty() ? static_cast<uint32_t>(std::stoi(::stringtoolbox::trim(_fieldIdentifier))) : fieldIdentifierCounter));
                           mf.defaultInitializationValue(_fieldDefaultInitializerValue);
                           mm.add(std::move(mf));
                       }
@@ -8158,9 +8390,9 @@ inline void UDPReceiver::readFromSocket() noexcept {
 namespace cluon {
 
 inline TCPConnection::TCPConnection(const std::string &address,
-                            uint16_t port,
-                            std::function<void(std::string &&, std::chrono::system_clock::time_point &&)> newDataDelegate,
-                            std::function<void()> connectionLostDelegate) noexcept
+                             uint16_t port,
+                             std::function<void(std::string &&, std::chrono::system_clock::time_point &&)> newDataDelegate,
+                             std::function<void()> connectionLostDelegate) noexcept
     : m_address()
     , m_readFromSocketThread()
     , m_newDataDelegate(std::move(newDataDelegate))
@@ -8172,17 +8404,15 @@ inline TCPConnection::TCPConnection(const std::string &address,
     std::vector<int> addressTokens{std::istream_iterator<int>(sstr), std::istream_iterator<int>()};
 
     if ((!addressTokens.empty()) && (4 == addressTokens.size())
-        && !(std::end(addressTokens)
-             != std::find_if(addressTokens.begin(), addressTokens.end(), [](int a) { return (a < 0) || (a > 255); }))
-        && (0 < port)) {
+        && !(std::end(addressTokens) != std::find_if(addressTokens.begin(), addressTokens.end(), [](int a) { return (a < 0) || (a > 255); })) && (0 < port)) {
         // Check for valid IP address.
         struct sockaddr_in tmpSocketAddress {};
         const bool isValid = (0 < ::inet_pton(AF_INET, address.c_str(), &(tmpSocketAddress.sin_addr)));
         if (isValid) {
             std::memset(&m_address, 0, sizeof(m_address));
             m_address.sin_addr.s_addr = ::inet_addr(address.c_str());
-            m_address.sin_family = AF_INET;
-            m_address.sin_port   = htons(port);
+            m_address.sin_family      = AF_INET;
+            m_address.sin_port        = htons(port);
 #ifdef WIN32
             // Load Winsock 2.2 DLL.
             WSADATA wsaData;
@@ -8201,7 +8431,7 @@ inline TCPConnection::TCPConnection(const std::string &address,
 #endif
 
             if (!(m_socket < 0)) {
-                auto retVal = ::connect(m_socket , reinterpret_cast<struct sockaddr *>(&m_address), sizeof(m_address));
+                auto retVal = ::connect(m_socket, reinterpret_cast<struct sockaddr *>(&m_address), sizeof(m_address));
                 if (0 > retVal) {
 #ifdef WIN32
                     auto errorCode = WSAGetLastError();
@@ -8209,8 +8439,7 @@ inline TCPConnection::TCPConnection(const std::string &address,
                     auto errorCode = errno;
 #endif
                     closeSocket(errorCode);
-                }
-                else {
+                } else {
                     // Constructing a thread could fail.
                     try {
                         m_readFromSocketThread = std::thread(&TCPConnection::readFromSocket, this);
@@ -8339,8 +8568,7 @@ inline void TCPConnection::readFromSocket() noexcept {
                 // Call newDataDelegate.
                 m_newDataDelegate(std::string(buffer.data(), static_cast<size_t>(bytesRead)), timestamp);
             }
-        }
-        else {
+        } else {
             // Let the operating system yield other threads.
             using namespace std::literals::chrono_literals;
             std::this_thread::sleep_for(1ms);
@@ -9604,6 +9832,338 @@ inline void FromMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::
     if (0 < m_keyValues.count(name)) {
         try {
             v = linb::any_cast<std::string>(m_keyValues[name].m_value);
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+} // namespace cluon
+/*
+ * Copyright (C) 2018  Christian Berger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//#include "cluon/FromJSONVisitor.hpp"
+//#include "cluon/stringtoolbox.hpp"
+
+#include <cstring>
+#include <algorithm>
+#include <array>
+#include <iterator>
+#include <regex>
+#include <sstream>
+#include <vector>
+
+#include <iostream>
+namespace cluon {
+
+inline FromJSONVisitor::FromJSONVisitor() noexcept
+    : m_keyValues{m_data} {}
+
+inline FromJSONVisitor::FromJSONVisitor(std::map<std::string, FromJSONVisitor::JSONKeyValue> &preset) noexcept
+    : m_keyValues{preset} {}
+
+inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::readKeyValues(std::string &input) noexcept {
+    const std::string MATCH_JSON = R"((?:\"|\')(?:[^"]*)(?:\"|\')(?=:)(?:\:\s*)(?:\"|\')?(?:true|false|[\-]{0,1}[0-9]+[\.][0-9]+|[\-]{0,1}[0-9]+|[0-9a-zA-Z\+\-\,\.\$\ \=]*)(?:\"|\')?)";
+
+    std::map<std::string, FromJSONVisitor::JSONKeyValue> result;
+    std::string oldInput;
+    try {
+        std::smatch m;
+        do {
+            std::regex_search(input, m, std::regex(MATCH_JSON));
+
+            if (m.size() > 0) {
+                std::string match{m[0]};
+                std::vector<std::string> retVal = stringtoolbox::split(match, ':');
+                if ( (retVal.size() == 1) || ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0) ) ) {
+                    std::string keyOfNestedObject{stringtoolbox::trim(retVal[0])};
+                    keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[0];
+                    {
+                        std::string suffix(m.suffix());
+                        suffix = stringtoolbox::trim(suffix);
+                        oldInput = input;
+                        input = suffix;
+                    }
+
+                    auto mapOfNestedValues = readKeyValues(input);
+
+                    JSONKeyValue kv;
+                    kv.m_key = keyOfNestedObject;
+                    kv.m_type = JSONConstants::OBJECT;
+                    kv.m_value = mapOfNestedValues;
+
+                    result[keyOfNestedObject] = kv;
+                }
+                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0) ) {
+                    auto e = std::make_pair(stringtoolbox::trim(retVal[0]), stringtoolbox::trim(retVal[1]));
+
+                    JSONKeyValue kv;
+                    kv.m_key = stringtoolbox::split(e.first, '"')[0];
+
+                    if ( (e.second.size() > 0) && (e.second.at(0) == '"') ) {
+                        kv.m_type = JSONConstants::STRING;
+                        kv.m_value = std::string(e.second).substr(1);
+                    }
+                    else if ( (e.second.size() > 0) && ( (e.second == "false") || (e.second == "true") ) ) {
+                        kv.m_type = (e.second == "true" ? JSONConstants::IS_TRUE : JSONConstants::IS_FALSE);
+                        kv.m_value = e.second == "true";
+                    }
+                    else {
+                        kv.m_type = JSONConstants::NUMBER;
+                        std::stringstream tmp(e.second);
+                        double v; tmp >> v;
+                        kv.m_value = v;
+                    }
+
+                    result[kv.m_key] = kv;
+
+                    {
+                        std::string suffix(m.suffix());
+                        suffix = stringtoolbox::trim(suffix);
+                        oldInput = input;
+                        input = suffix;
+                        if (suffix.size() > 0 && suffix.at(0) == '}') {
+                            break; // Nested payload complete; return.
+                        }
+                    }
+                }
+            }
+        } while (!m.empty() && (oldInput != input));
+    } catch (std::regex_error &) {
+    } catch (std::bad_cast &) {
+    }
+
+    return result;
+}
+
+inline void FromJSONVisitor::decodeFrom(std::istream &in) noexcept {
+    m_keyValues.clear();
+
+    std::string s;
+    std::istream_iterator<char> it(in), it_end;
+    std::copy(it, it_end, std::insert_iterator<std::string>(s, s.begin()));
+
+    // Remove whitespace characters like newline, carriage return, or tab.
+    s.erase(std::remove_if( s.begin(), s.end(), [](char c){ return (c =='\r' || c =='\t' || c == '\n');}), s.end() );
+
+    // Parse JSON from in.
+    m_keyValues = readKeyValues(s);
+}
+
+inline std::string FromJSONVisitor::decodeBase64(const std::string &input) const noexcept {
+    const std::string ALPHABET{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
+    uint8_t counter{0};
+    char buffer[4];
+    std::string decoded;
+    for (uint32_t i{0}; i < input.size(); i++) {
+        char c;
+        for (c = 0 ; c < 64 && (ALPHABET.at(static_cast<uint8_t>(c)) != input.at(i)); c++);
+
+        buffer[counter++] = c;
+        if (4 == counter) {
+            decoded.push_back(static_cast<char>((buffer[0] << 2) + (buffer[1] >> 4)));
+            if (64 != buffer[2]) {
+                decoded.push_back(static_cast<char>((buffer[1] << 4) + (buffer[2] >> 2)));
+            }
+            if (64 != buffer[3]) {
+                decoded.push_back(static_cast<char>((buffer[2] << 6) + buffer[3]));
+            }
+            counter = 0;
+        }
+    }
+    return decoded;
+}
+
+inline void FromJSONVisitor::preVisit(int32_t id, const std::string &shortName, const std::string &longName) noexcept {
+    (void)id;
+    (void)shortName;
+    (void)longName;
+}
+
+inline void FromJSONVisitor::postVisit() noexcept {}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, bool &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::IS_FALSE == m_keyValues[name].m_type) {
+                v = false;
+            }
+            else if (JSONConstants::IS_TRUE == m_keyValues[name].m_type) {
+                v = true;
+            }
+            else if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = (1 == static_cast<uint32_t>(linb::any_cast<double>(m_keyValues[name].m_value)));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, char &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::STRING == m_keyValues[name].m_type) {
+                v = linb::any_cast<std::string>(m_keyValues[name].m_value).at(0);
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, int8_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<int8_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, uint8_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<uint8_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, int16_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<int16_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, uint16_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<uint16_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, int32_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<int32_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, uint32_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<uint32_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, int64_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<int64_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, uint64_t &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<uint64_t>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, float &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = static_cast<float>(linb::any_cast<double>(m_keyValues[name].m_value));
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, double &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+                v = linb::any_cast<double>(m_keyValues[name].m_value);
+            }
+        } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
+        }
+    }
+}
+
+inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::string &&name, std::string &v) noexcept {
+    (void)id;
+    (void)typeName;
+    if (0 < m_keyValues.count(name)) {
+        try {
+            std::string tmp{linb::any_cast<std::string>(m_keyValues[name].m_value)};
+            v = decodeBase64(tmp);
         } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
         }
     }
@@ -10997,12 +11557,14 @@ inline void ToMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::st
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//#include "cluon/Envelope.hpp"
 //#include "cluon/OD4Session.hpp"
+//#include "cluon/Envelope.hpp"
 //#include "cluon/FromProtoVisitor.hpp"
+//#include "cluon/Time.hpp"
 
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 namespace cluon {
 
@@ -11013,52 +11575,83 @@ inline OD4Session::OD4Session(uint16_t CID, std::function<void(cluon::data::Enve
                      this->callback(std::move(data), std::move(from), std::move(timepoint));
                  }}
     , m_sender{"225.0.0." + std::to_string(CID), 12175}
-    , m_delegate(delegate) {}
+    , m_delegate(delegate)
+    , m_mapOfDataTriggeredDelegatesMutex{}
+    , m_mapOfDataTriggeredDelegates{} {}
+
+inline void OD4Session::timeTrigger(float freq, std::function<bool()> delegate) noexcept {
+    if (nullptr != delegate) {
+        bool delegateIsRunning{true};
+        const int64_t TIME_SLICE_IN_MILLISECONDS{static_cast<uint32_t>(1000 / ((freq > 0) ? freq : 1.0f))};
+        do {
+            cluon::data::TimeStamp before{cluon::time::now()};
+            try {
+                delegateIsRunning = delegate();
+            } catch (...) {
+                delegateIsRunning = false; // delegate threw exception.
+            }
+            cluon::data::TimeStamp after{cluon::time::now()};
+
+            const int64_t beforeInMicroseconds{before.seconds() * 1000 * 1000 + before.microseconds()};
+            const int64_t afterInMicroseconds{after.seconds() * 1000 * 1000 + after.microseconds()};
+
+            const int64_t timeSpent{(afterInMicroseconds > beforeInMicroseconds) ? (afterInMicroseconds - beforeInMicroseconds) / 1000 : 0};
+            const int64_t timeToSleepInMilliseconds{TIME_SLICE_IN_MILLISECONDS - timeSpent};
+
+            // Sleep the remaining time.
+            if ((timeToSleepInMilliseconds > 0) && (timeToSleepInMilliseconds <= TIME_SLICE_IN_MILLISECONDS)) {
+                std::this_thread::sleep_for(std::chrono::duration<int64_t, std::milli>(timeToSleepInMilliseconds));
+            } else {
+                std::cerr << "[cluon::OD4Session]: time-triggered delegate violated allocated time slice." << std::endl;
+            }
+        } while (delegateIsRunning);
+    }
+}
+
+inline bool OD4Session::dataTrigger(int32_t messageIdentifier, std::function<void(cluon::data::Envelope &&envelope)> delegate) noexcept {
+    bool retVal{false};
+    if (nullptr == m_delegate) {
+        try {
+            std::lock_guard<std::mutex> lck{m_mapOfDataTriggeredDelegatesMutex};
+            if ((nullptr == delegate) && (m_mapOfDataTriggeredDelegates.count(messageIdentifier) > 0)) {
+                auto element = m_mapOfDataTriggeredDelegates.find(messageIdentifier);
+                if (element != m_mapOfDataTriggeredDelegates.end()) {
+                    m_mapOfDataTriggeredDelegates.erase(element);
+                }
+            } else {
+                m_mapOfDataTriggeredDelegates[messageIdentifier] = delegate;
+            }
+            retVal = true;
+        } catch (...) {} // LCOV_EXCL_LINE
+    }
+    return retVal;
+}
 
 inline void OD4Session::callback(std::string &&data, std::string &&from, std::chrono::system_clock::time_point &&timepoint) noexcept {
-    cluon::data::TimeStamp receivedAt;
-    {
-        // Transform chrono time representation to same behavior as gettimeofday.
-        typedef std::chrono::duration<int32_t> seconds_type;
-        typedef std::chrono::duration<int64_t, std::micro> microseconds_type;
+    std::stringstream sstr(data);
+    auto retVal = extractEnvelope(sstr);
 
-        auto duration                = timepoint.time_since_epoch();
-        seconds_type s               = std::chrono::duration_cast<seconds_type>(duration);
-        microseconds_type us         = std::chrono::duration_cast<microseconds_type>(duration);
-        microseconds_type partial_us = us - std::chrono::duration_cast<microseconds_type>(s);
+    if (retVal.first) {
+        cluon::data::TimeStamp receivedAt{cluon::time::convert(timepoint)};
+        cluon::data::Envelope env{retVal.second};
+        env.received(receivedAt);
 
-        receivedAt.seconds(static_cast<int32_t>(s.count())).microseconds(static_cast<int32_t>(partial_us.count()));
-    }
-
-    if (nullptr != m_delegate) {
-        constexpr uint8_t OD4_HEADER_SIZE{5};
-        const std::string protoEncodedEnvelope{data};
-        if (OD4_HEADER_SIZE <= protoEncodedEnvelope.size()) {
-            char byte0{protoEncodedEnvelope.at(0)};
-            char byte1{protoEncodedEnvelope.at(1)};
-            uint32_t length{0};
-            {
-                std::stringstream sstr{std::string(&protoEncodedEnvelope[1], 4)};
-                sstr.read(reinterpret_cast<char *>(&length), sizeof(uint32_t)); /* Flawfinder: ignore */ // NOLINT
-                length = le32toh(length);
-                length >>= 8;
-            }
-            std::string input;
-            if ((0x0D == static_cast<uint8_t>(byte0)) && (0xA4 == static_cast<uint8_t>(byte1)) && (length == protoEncodedEnvelope.size() - OD4_HEADER_SIZE)) {
-                cluon::data::Envelope env;
-                {
-                    std::stringstream sstr{protoEncodedEnvelope.substr(OD4_HEADER_SIZE)};
-                    cluon::FromProtoVisitor protoDecoder;
-                    protoDecoder.decodeFrom(sstr);
-                    env.accept(protoDecoder);
+        // "Catch all"-delegate.
+        if (nullptr != m_delegate) {
+            cluon::data::Envelope env1{retVal.second};
+            m_delegate(std::move(env));
+        } else {
+            try {
+                // Data triggered-delegates.
+                std::lock_guard<std::mutex> lck{m_mapOfDataTriggeredDelegatesMutex};
+                if (m_mapOfDataTriggeredDelegates.count(env.dataType()) > 0) {
+                    m_mapOfDataTriggeredDelegates[env.dataType()](std::move(env));
+                } else {
+                    std::cout << "[cluon::OD4Session] Received " << data.size() << " bytes from " << from << " at " << receivedAt.seconds() << "."
+                              << receivedAt.microseconds() << "." << std::endl;
                 }
-                env.received(receivedAt);
-                m_delegate(std::move(env));
-            }
+            } catch (...) {} // LCOV_EXCL_LINE
         }
-    } else {
-        std::cout << "[cluon::OD4Session] Received " << data.size() << " bytes from " << from << " at " << receivedAt.seconds() << "."
-                  << receivedAt.microseconds() << "." << std::endl;
     }
 }
 
@@ -13156,5 +13749,151 @@ int main(int argc, char **argv) {
         }
     }
     return retCode;
+}
+#endif
+#ifdef HAVE_CLUON_LIVEFEED
+/*
+ * Copyright (C) 2018  Christian Berger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//#include "cluon/cluon.hpp"
+//#include "cluon/MetaMessage.hpp"
+//#include "cluon/MessageParser.hpp"
+//#include "cluon/OD4Session.hpp"
+
+#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <thread>
+
+enum Color {
+    RED     = 31,
+    GREEN   = 32,
+    YELLOW  = 33,
+    DEFAULT = 39,
+};
+
+void clearScreen();
+void writeText(Color c, uint8_t y, uint8_t x, const std::string &text);
+std::string formatTimeStamp(const cluon::data::TimeStamp &ts);
+
+void clearScreen() {
+    std::cout << "\033[2J" << std::endl;
+}
+
+void writeText(Color c, uint8_t y, uint8_t x, const std::string &text) {
+    std::cout << "\033[" << +y << ";" << +x << "H" << "\033[0;" << +c << "m" << text << "\033[0m" << std::endl;
+}
+
+std::string formatTimeStamp(const cluon::data::TimeStamp &ts) {
+    std::time_t temp = static_cast<std::time_t>(ts.seconds());
+    std::tm* t = std::gmtime(&temp);
+    std::stringstream sstr;
+    sstr << std::put_time(t, "%H:%M:%S") << "." << std::setfill('0') << std::setw(6) << ts.microseconds() << std::setw(0);
+    const std::string str{sstr.str()};
+    return str;
+}
+
+int main(int argc, char **argv) {
+    int retVal{1};
+    const std::string PROGRAM{argv[0]}; // NOLINT
+    auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
+    if (0 == commandlineArguments.count("cid")) {
+        std::cerr << PROGRAM
+                  << " displays any Envelopes received from an OpenDaVINCI v4 session to stdout with optional data type resolving using a .odvd message specification." << std::endl;
+        std::cerr << "Usage:    " << PROGRAM << " [--odvd=<ODVD message specification file>] --cid=<OpenDaVINCI session>" << std::endl;
+        std::cerr << "Examples: " << PROGRAM << " --cid=111" << std::endl;
+        std::cerr << "          " << PROGRAM << " --odvd=MyMessages.odvd --cid=111" << std::endl;
+    } else {
+        std::map<int32_t, cluon::MetaMessage> scopeOfMetaMessages{};
+
+        // Try parsing a supplied .odvd file to resolve numerical data types to human readable message names.
+        {
+            std::string odvdFile{commandlineArguments["odvd"]};
+            if (!odvdFile.empty()) {
+                std::fstream fin{odvdFile, std::ios::in};
+                if (fin.good()) {
+                    const std::string s{static_cast<std::stringstream const&>(std::stringstream() << fin.rdbuf()).str()}; // NOLINT
+
+                    cluon::MessageParser mp;
+                    auto parsingResult = mp.parse(s);
+                    if (!parsingResult.first.empty()) {
+                        for (const auto &mm : parsingResult.first) { scopeOfMetaMessages[mm.messageIdentifier()] = mm; }
+                        std::clog << "Parsed " << parsingResult.first.size() << " message(s)." << std::endl;
+                    }
+                }
+            }
+        }
+
+        std::mutex mapOfLastEnvelopesMutex;
+        std::map<int32_t, std::map<uint32_t, cluon::data::Envelope> > mapOfLastEnvelopes;
+
+        cluon::OD4Session od4Session(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])),
+            [&](cluon::data::Envelope &&envelope) noexcept {
+            std::lock_guard<std::mutex> lck(mapOfLastEnvelopesMutex);
+
+            // Update mapping for tupel (dataType, senderStamp) --> Envelope.
+            std::map<uint32_t, cluon::data::Envelope> entry = mapOfLastEnvelopes[envelope.dataType()];
+            entry[envelope.senderStamp()] = envelope;
+            mapOfLastEnvelopes[envelope.dataType()] = entry;
+
+            clearScreen();
+
+            const auto LAST_TIME_POINT{envelope.received().seconds() * 1000 * 1000 + envelope.received().microseconds()};
+
+            uint8_t y = 1;
+            const uint8_t x = 1;
+            for (auto e : mapOfLastEnvelopes) {
+                for (auto ee : e.second) {
+                    auto env = ee.second;
+                    std::stringstream sstr;
+
+                    sstr << "Envelope: " << std::setfill(' ') << std::setw(5) << env.dataType() << std::setw(0) << "/" << env.senderStamp() << "; " << "sent: " << formatTimeStamp(env.sent()) << "; sample: " << formatTimeStamp(env.sampleTimeStamp());
+                    if (scopeOfMetaMessages.count(env.dataType()) > 0) {
+                        sstr << "; " << scopeOfMetaMessages[env.dataType()].messageName();
+                    }
+                    else {
+                        sstr << "; unknown data type";
+                    }
+                    sstr << std::endl;
+
+                    const auto AGE{LAST_TIME_POINT - (env.received().seconds() * 1000 * 1000 + env.received().microseconds())};
+
+                    Color c = Color::DEFAULT;
+                    if (AGE <= 2 * 1000 * 1000) { c = Color::GREEN; }
+                    if (AGE > 2 * 1000 * 1000 && AGE <= 5 * 1000 * 1000) { c = Color::YELLOW; }
+                    if (AGE > 5 * 1000 * 1000) { c = Color::RED; }
+
+                    writeText(c, y++, x, sstr.str());
+                }
+            }
+        });
+
+        using namespace std::literals::chrono_literals; // NOLINT
+        while (od4Session.isRunning()) {
+            std::this_thread::sleep_for(1s);
+        }
+
+        retVal = 0;
+    }
+    return retVal;
 }
 #endif

@@ -28,42 +28,52 @@ int32_t main(int32_t argc, char **argv) {
     std::cerr << "Example: " << argv[0] << " --frame-id=0 --freq=100 --cid=111" << std::endl;
     retCode = 1;
   } else {
-    const bool VERBOSE{commandlineArguments.count("verbose") != 0};
-
+    bool const VERBOSE{commandlineArguments.count("verbose") != 0};
+    uint16_t const CID = std::stoi(commandlineArguments["cid"]);
+    uint32_t const FRAME_ID = std::stoi(commandlineArguments["frame-id"]);
+    float const FREQ = std::stof(commandlineArguments["freq"]);
+    double const DT = 1.0 / FREQ;
+    
     SingleTrackModel singleTrackModel;
 
-    uint32_t const FRAME_ID = std::stoi(commandlineArguments["frame-id"]);
-    auto onEnvelope{[&FRAME_ID, &singleTrackModel](cluon::data::Envelope &&envelope)
+    auto onGroundSteeringRequest{[&FRAME_ID, &singleTrackModel](cluon::data::Envelope &&envelope)
       {
         uint32_t const senderStamp = envelope.senderStamp();
-        if (envelope.dataType() == opendlv::proxy::GroundSteeringRequest::ID() &&
-            FRAME_ID == senderStamp) {
+        if (FRAME_ID == senderStamp) {
           auto groundSteeringAngleRequest = cluon::extractMessage<opendlv::proxy::GroundSteeringRequest>(std::move(envelope));
           singleTrackModel.setGroundSteeringAngle(groundSteeringAngleRequest);
-        } else if (envelope.dataType() == opendlv::proxy::PedalPositionRequest::ID() &&
-            FRAME_ID == senderStamp) {
+        }
+      }};
+    auto onPedalPositionRequest{[&FRAME_ID, &singleTrackModel](cluon::data::Envelope &&envelope)
+      {
+        uint32_t const senderStamp = envelope.senderStamp();
+        if (FRAME_ID == senderStamp) {
           auto pedalPositionRequest = cluon::extractMessage<opendlv::proxy::PedalPositionRequest>(std::move(envelope));
           singleTrackModel.setPedalPosition(pedalPositionRequest);
         }
       }};
 
-    cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])), onEnvelope};
+    cluon::OD4Session od4{CID};
+    od4.dataTrigger(opendlv::proxy::GroundSteeringRequest::ID(), onGroundSteeringRequest);
+    od4.dataTrigger(opendlv::proxy::PedalPositionRequest::ID(), onPedalPositionRequest);
 
-    double dt = 1.0 / std::stoi(commandlineArguments["freq"]);
-    while (od4.isRunning()) {
-      std::this_thread::sleep_for(std::chrono::duration<double>(dt));
+    auto atFrequency{[&FRAME_ID, &VERBOSE, &DT, &singleTrackModel, &od4]() -> bool
+      {
+        opendlv::sim::KinematicState kinematicState = singleTrackModel.step(DT);
 
-      opendlv::sim::KinematicState kinematicState = singleTrackModel.step(dt);
+        cluon::data::TimeStamp sampleTime;
+        od4.send(kinematicState, sampleTime, FRAME_ID);
+        if (VERBOSE) {
+          std::cout << "Kinematic state with id " << FRAME_ID
+            << " is at velocity [vx=" << kinematicState.vx() << ", vy=" << kinematicState.vy() << ", vz="
+            << kinematicState.vz() << "] with the rotation rate [rollRate=" << kinematicState.rollRate() << ", pitchRate="
+            << kinematicState.pitchRate() << ", yawRate=" << kinematicState.yawRate() << "]." << std::endl;
+        }
 
-      cluon::data::TimeStamp sampleTime;
-      od4.send(kinematicState, sampleTime, FRAME_ID);
-      if (VERBOSE) {
-        std::cout << "Kinematic state with id " << FRAME_ID
-          << " is at velocity [vx=" << kinematicState.vx() << ", vy=" << kinematicState.vy() << ", vz="
-          << kinematicState.vz() << "] with the rotation rate [rollRate=" << kinematicState.rollRate() << ", pitchRate="
-          << kinematicState.pitchRate() << ", yawRate=" << kinematicState.yawRate() << "]." << std::endl;
-      }
-    }
+        return true;
+      }};
+
+    od4.timeTrigger(FREQ, atFrequency);
   }
   return retCode;
 }
