@@ -23,7 +23,27 @@
 
 #include "single-track-model.hpp"
 
-TEST_CASE("Test single track model, zero input should give zero output.") {
+TEST_CASE("Test single track model, zero speed should always give zero output.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(0.5);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(0.0);
+  stm.setPedalPosition(ppr);
+
+  opendlv::sim::KinematicState ks = stm.step(0.01);
+  REQUIRE(ks.vx() == Approx(0.0f));
+  REQUIRE(ks.vy() == Approx(0.0f));
+  REQUIRE(ks.vz() == Approx(0.0f));
+  REQUIRE(ks.rollRate() == Approx(0.0f));
+  REQUIRE(ks.pitchRate() == Approx(0.0f));
+  REQUIRE(ks.yawRate() == Approx(0.0f));
+}
+
+TEST_CASE("Test single track model, going straight ahead should give positive longitudinal constat behaviour.") {
   SingleTrackModel stm;
 
   opendlv::proxy::GroundSteeringRequest gsr;
@@ -31,10 +51,183 @@ TEST_CASE("Test single track model, zero input should give zero output.") {
   stm.setGroundSteeringAngle(gsr);
 
   opendlv::proxy::PedalPositionRequest ppr;
-  ppr.position(0.0);
+  ppr.position(0.5);
   stm.setPedalPosition(ppr);
 
-  opendlv::sim::KinematicState ks = stm.step(0.1);
-  float sum = ks.vx() + ks.vy() + ks.vz() + ks.rollRate() + ks.pitchRate() + ks.yawRate(); 
-  REQUIRE(sum == Approx(0.0f));
+  float prevLongitudinalSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLongitudinalSpeed = longitudinalSpeed;
+    longitudinalSpeed = ks.vx();
+    REQUIRE(longitudinalSpeed >= 0.0f);
+
+    REQUIRE(ks.vy() == Approx(0.0f));
+    REQUIRE(ks.vz() == Approx(0.0f));
+    REQUIRE(ks.rollRate() == Approx(0.0f));
+    REQUIRE(ks.pitchRate() == Approx(0.0f));
+    REQUIRE(ks.yawRate() == Approx(0.0f));
+  }
+  std::cout << longitudinalSpeed << " " << prevLongitudinalSpeed << std::endl;
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+}
+
+TEST_CASE("Test single track model, going in reverse should give negative longitudinal constat behaviour.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(0.0);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(-0.5);
+  stm.setPedalPosition(ppr);
+
+  float prevLongitudinalSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLongitudinalSpeed = longitudinalSpeed;
+    longitudinalSpeed = ks.vx();
+    REQUIRE(longitudinalSpeed <= 0.0f);
+
+    REQUIRE(ks.vy() == Approx(0.0f));
+    REQUIRE(ks.vz() == Approx(0.0f));
+    REQUIRE(ks.rollRate() == Approx(0.0f));
+    REQUIRE(ks.pitchRate() == Approx(0.0f));
+    REQUIRE(ks.yawRate() == Approx(0.0f));
+  }
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+}
+
+TEST_CASE("Test single track model, steering to the left should give movement to the left and CCW rotation, and find steady state.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(0.5);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(0.5);
+  stm.setPedalPosition(ppr);
+
+  float prevLateralSpeed{0.0f};
+  float prevLongitudinalSpeed{0.0f};
+  float prevYawRate{0.0f};
+  float lateralSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  float yawRate{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLateralSpeed = lateralSpeed;
+    prevLongitudinalSpeed = longitudinalSpeed;
+    prevYawRate = yawRate;
+    lateralSpeed = ks.vy();
+    longitudinalSpeed = ks.vx();
+    yawRate = ks.yawRate();
+    REQUIRE(lateralSpeed >= 0.0f);
+    REQUIRE(yawRate >= 0.0f);
+  }
+  REQUIRE(lateralSpeed == Approx(prevLateralSpeed));
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+  REQUIRE(yawRate == Approx(prevYawRate));
+}
+
+TEST_CASE("Test single track model, steering to the left while reversing should give movement to the left and CW rotation, and find steady state.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(0.5);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(-0.5);
+  stm.setPedalPosition(ppr);
+
+  float prevLateralSpeed{0.0f};
+  float prevLongitudinalSpeed{0.0f};
+  float prevYawRate{0.0f};
+  float lateralSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  float yawRate{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLateralSpeed = lateralSpeed;
+    prevLongitudinalSpeed = longitudinalSpeed;
+    prevYawRate = yawRate;
+    lateralSpeed = ks.vy();
+    longitudinalSpeed = ks.vx();
+    yawRate = ks.yawRate();
+    REQUIRE(lateralSpeed >= 0.0f);
+    REQUIRE(yawRate >= 0.0f);
+  }
+  REQUIRE(lateralSpeed == Approx(prevLateralSpeed));
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+  REQUIRE(yawRate == Approx(prevYawRate));
+}
+
+TEST_CASE("Test single track model, steering to the right should give movement to the right and CW rotation, and find steady state.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(-0.5);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(0.5);
+  stm.setPedalPosition(ppr);
+
+  float prevLateralSpeed{0.0f};
+  float prevLongitudinalSpeed{0.0f};
+  float prevYawRate{0.0f};
+  float lateralSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  float yawRate{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLateralSpeed = lateralSpeed;
+    prevLongitudinalSpeed = longitudinalSpeed;
+    prevYawRate = yawRate;
+    lateralSpeed = ks.vy();
+    longitudinalSpeed = ks.vx();
+    yawRate = ks.yawRate();
+    REQUIRE(lateralSpeed <= 0.0f);
+    REQUIRE(yawRate <= 0.0f);
+  }
+  REQUIRE(lateralSpeed == Approx(prevLateralSpeed));
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+  REQUIRE(yawRate == Approx(prevYawRate));
+}
+
+TEST_CASE("Test single track model, steering to the right while reversing should give movement to the right and CCW rotation, and find steady state.") {
+  SingleTrackModel stm;
+
+  opendlv::proxy::GroundSteeringRequest gsr;
+  gsr.groundSteering(-0.5);
+  stm.setGroundSteeringAngle(gsr);
+
+  opendlv::proxy::PedalPositionRequest ppr;
+  ppr.position(-0.5);
+  stm.setPedalPosition(ppr);
+
+  float prevLateralSpeed{0.0f};
+  float prevLongitudinalSpeed{0.0f};
+  float prevYawRate{0.0f};
+  float lateralSpeed{0.0f};
+  float longitudinalSpeed{0.0f};
+  float yawRate{0.0f};
+  for (uint16_t i{0}; i < 100; i++) {
+    opendlv::sim::KinematicState ks = stm.step(0.01);
+    prevLateralSpeed = lateralSpeed;
+    prevLongitudinalSpeed = longitudinalSpeed;
+    prevYawRate = yawRate;
+    lateralSpeed = ks.vy();
+    longitudinalSpeed = ks.vx();
+    yawRate = ks.yawRate();
+    REQUIRE(lateralSpeed <= 0.0f);
+    REQUIRE(yawRate <= 0.0f);
+  }
+  REQUIRE(lateralSpeed == Approx(prevLateralSpeed));
+  REQUIRE(longitudinalSpeed == Approx(prevLongitudinalSpeed));
+  REQUIRE(yawRate == Approx(prevYawRate));
 }

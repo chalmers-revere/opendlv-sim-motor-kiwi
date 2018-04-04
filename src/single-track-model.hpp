@@ -39,10 +39,6 @@ class SingleTrackModel {
   opendlv::sim::KinematicState step(double) noexcept;
 
  private:
-  double magicFormula(double const &, double const &, double const &, 
-      double const &, double const &, double const &) const;
-
- private:
   std::mutex m_groundSteeringAngleMutex;
   std::mutex m_pedalPositionMutex;
   double m_longitudinalSpeed;

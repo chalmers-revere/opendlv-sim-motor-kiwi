@@ -16,6 +16,7 @@
  */
 
 #include <cmath>
+#include <iostream>
 
 #include "single-track-model.hpp"
 
@@ -44,20 +45,15 @@ void SingleTrackModel::setPedalPosition(opendlv::proxy::PedalPositionRequest con
 
 opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
 {
-  double const g{9.82};
+  double const pedalSpeedGain{0.5};
 
   double const mass{1.0};
-  double const momentOfInertiaZ{3.0};
-  double const length{0.3};
-  double const frontToCog{0.15};
+  double const momentOfInertiaZ{0.01};
+  double const length{0.22};
+  double const frontToCog{0.11};
   double const rearToCog{length - frontToCog};
-  double const frictionCoefficient{0.1};
-
-  double const pedalSpeedGain{0.8};
-
-  double const magicFormulaCAlpha{1000.0};
-  double const magicFormulaC{1000.0};
-  double const magicFormulaE{1000.0};
+  double const corneringStiffnessFront{10.0};
+  double const corneringStiffnessRear{10.0};
   
   float groundSteeringAngleCopy;
   float pedalPositionCopy;
@@ -68,50 +64,31 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
     pedalPositionCopy = m_pedalPosition;
   }
 
-
-  double slipAngleFront = 0.0;
-  double slipAngleRear = 0.0;
-  if (std::abs(m_longitudinalSpeed) > 0.001) {
-    slipAngleFront = groundSteeringAngleCopy - std::atan(
-        (m_lateralSpeed + frontToCog * m_yawRate) / std::abs(m_longitudinalSpeed));
-    slipAngleRear = -std::atan((m_lateralSpeed - rearToCog * m_yawRate) / 
-        std::abs(m_longitudinalSpeed));
-  }
-
-  double const forceFrontZ = mass * g * (frontToCog / (frontToCog + length));
-  double const forceRearZ = mass * g * (length / (frontToCog + length));
-
-  double const forceFrontY = magicFormula(slipAngleFront, forceFrontZ,
-      frictionCoefficient, magicFormulaCAlpha, magicFormulaC, magicFormulaE);
-  double const forceRearY = magicFormula(slipAngleRear, forceRearZ,
-      frictionCoefficient, magicFormulaCAlpha, magicFormulaC, magicFormulaE);
-
-  double const lateralSpeedDot = 
-    (forceFrontY * std::cos(groundSteeringAngleCopy) + forceRearY) / mass -
-    m_yawRate * m_lateralSpeed;
-
-  double const yawRateDot = (length * forceFrontY * 
-      std::cos(groundSteeringAngleCopy) - frontToCog * forceRearY) /
-    momentOfInertiaZ;
-
   m_longitudinalSpeed = pedalPositionCopy * pedalSpeedGain;
-  m_lateralSpeed += lateralSpeedDot * dt;
-  m_yawRate += yawRateDot * dt;
 
+  if (std::abs(m_longitudinalSpeed) > 1e-4) {
+    double const slipAngleFront = groundSteeringAngleCopy 
+      - (m_lateralSpeed + frontToCog * m_yawRate) 
+      / std::abs(m_longitudinalSpeed);
+    double const slipAngleRear = (rearToCog * m_yawRate - m_lateralSpeed) 
+      / std::abs(m_longitudinalSpeed);
+
+    double const lateralSpeedDot = (corneringStiffnessFront * slipAngleFront 
+        + corneringStiffnessRear * slipAngleRear)
+      / (mass - m_longitudinalSpeed * m_yawRate);
+
+    double const yawRateDot = (frontToCog * corneringStiffnessFront * slipAngleFront 
+        - rearToCog * corneringStiffnessRear * slipAngleRear)
+      / momentOfInertiaZ;
+
+    m_lateralSpeed += lateralSpeedDot * dt;
+    m_yawRate += yawRateDot * dt;
+  }
+  
   opendlv::sim::KinematicState kinematicState;
   kinematicState.vx(static_cast<float>(m_longitudinalSpeed));
   kinematicState.vy(static_cast<float>(m_lateralSpeed));
   kinematicState.yawRate(static_cast<float>(m_yawRate));
 
   return kinematicState;
-}
-
-double SingleTrackModel::magicFormula(double const &a_slipAngle, double const &a_forceZ, 
-    double const &a_frictionCoefficient, double const &a_cAlpha, double const &a_c, 
-    double const &a_e) const
-{
-  double const b = a_cAlpha / (a_c * a_frictionCoefficient * a_forceZ);
-  double const forceY = a_frictionCoefficient * a_forceZ * std::sin(a_c *
-     std::atan(b * a_slipAngle - a_e * (b * a_slipAngle - std::atan(b * a_slipAngle))));
-  return forceY;
 }
