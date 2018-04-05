@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Wed, 04 Apr 2018 12:20:50 +0200
-// Version: 0.0.62
+// Date: Wed, 04 Apr 2018 22:16:26 +0200
+// Version: 0.0.63
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -5711,11 +5711,11 @@ class LIBCLUON_API FromJSONVisitor {
         JSONKeyValue &operator=(JSONKeyValue &&) = delete;
 
        public:
-        JSONKeyValue()                        = default;
+        JSONKeyValue()                     = default;
         JSONKeyValue(const JSONKeyValue &) = default;
         JSONKeyValue(JSONKeyValue &&)      = default;
         JSONKeyValue &operator=(const JSONKeyValue &) = default;
-        ~JSONKeyValue()                                  = default;
+        ~JSONKeyValue()                               = default;
 
        public:
         std::string m_key{""};
@@ -6342,84 +6342,6 @@ class LIBCLUON_API ToMsgPackVisitor {
 
 #endif
 /*
- * Copyright (C) 2017-2018  Christian Berger
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
-#ifndef ENVELOPETOJSON_HPP
-#define ENVELOPETOJSON_HPP
-
-//#include "cluon/MetaMessage.hpp"
-//#include "cluon/cluon.hpp"
-//#include "cluon/cluonDataStructures.hpp"
-
-#include <cstdint>
-#include <map>
-#include <string>
-#include <vector>
-
-namespace cluon {
-/**
-This class transforms a given Envelope into a JSON representation for its
-contained payload.
-*/
-class LIBCLUON_API EnvelopeToJSON {
-   private:
-    EnvelopeToJSON(const EnvelopeToJSON &) = delete;
-    EnvelopeToJSON(EnvelopeToJSON &&)      = delete;
-    EnvelopeToJSON &operator=(const EnvelopeToJSON &) = delete;
-    EnvelopeToJSON &operator=(EnvelopeToJSON &&) = delete;
-
-   public:
-    EnvelopeToJSON() = default;
-
-    /**
-     * This method sets the message specification to be used for
-     * interpreting a given Proto-encoded Envelope.
-     *
-     * @param ms Message specification following the ODVD format.
-     * @return -1 in case of invalid message specification; otherwise, number
-     *         of successfully parsed messages from given message specification.
-     */
-    int32_t setMessageSpecification(const std::string &ms) noexcept;
-
-    /**
-     * This method transforms the given Proto-encoded Envelope to JSON. The
-     * Proto-encoded envelope might be preceded with a 5-bytes OD4-header (optional).
-     *
-     * @param protoEncodedEnvelope Proto-encoded Envelope.
-     * @return JSON representation from given Proto-encoded Envelope using the
-     *         given message specification.
-     */
-    std::string getJSONFromProtoEncodedEnvelope(const std::string &protoEncodedEnvelope) noexcept;
-
-    /**
-     * This method transforms the given Envelope to JSON.
-     *
-     * @param envelope Envelope.
-     * @return JSON representation from given Envelope using the given message specification.
-     */
-    std::string getJSONFromEnvelope(cluon::data::Envelope &envelope) noexcept;
-
-   private:
-    std::vector<cluon::MetaMessage> m_listOfMetaMessages{};
-    std::map<int32_t, cluon::MetaMessage> m_scopeOfMetaMessages{};
-};
-} // namespace cluon
-#endif
-/*
  * Copyright (C) 2018  Christian Berger
  *
  * This program is free software: you can redistribute it and/or modify
@@ -6563,6 +6485,94 @@ inline T extractMessage(cluon::data::Envelope &&envelope) noexcept {
 
 } // namespace cluon
 
+#endif
+/*
+ * Copyright (C) 2017-2018  Christian Berger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef ENVELOPECONVERTER_HPP
+#define ENVELOPECONVERTER_HPP
+
+//#include "cluon/MetaMessage.hpp"
+//#include "cluon/cluon.hpp"
+//#include "cluon/cluonDataStructures.hpp"
+
+#include <cstdint>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace cluon {
+/**
+This class provides various conversion functions to and from Envelope data structures.
+*/
+class LIBCLUON_API EnvelopeConverter {
+   private:
+    EnvelopeConverter(const EnvelopeConverter &) = delete;
+    EnvelopeConverter(EnvelopeConverter &&)      = delete;
+    EnvelopeConverter &operator=(const EnvelopeConverter &) = delete;
+    EnvelopeConverter &operator=(EnvelopeConverter &&) = delete;
+
+   public:
+    EnvelopeConverter() = default;
+
+    /**
+     * This method sets the message specification to be used for
+     * interpreting a given Proto-encoded Envelope.
+     *
+     * @param ms Message specification following the ODVD format.
+     * @return -1 in case of invalid message specification; otherwise, number
+     *         of successfully parsed messages from given message specification.
+     */
+    int32_t setMessageSpecification(const std::string &ms) noexcept;
+
+    /**
+     * This method transforms the given Proto-encoded Envelope to JSON. The
+     * Proto-encoded envelope might be preceded with a 5-bytes OD4-header (optional).
+     *
+     * @param protoEncodedEnvelope Proto-encoded Envelope.
+     * @return JSON representation from given Proto-encoded Envelope using the
+     *         given message specification.
+     */
+    std::string getJSONFromProtoEncodedEnvelope(const std::string &protoEncodedEnvelope) noexcept;
+
+    /**
+     * This method transforms the given Envelope to JSON.
+     *
+     * @param envelope Envelope.
+     * @return JSON representation from given Envelope using the given message specification.
+     */
+    std::string getJSONFromEnvelope(cluon::data::Envelope &envelope) noexcept;
+
+    /**
+     * This method transforms a given JSON representation into a Proto-encoded Envelope
+     * including the prepended OD4-header.
+     *
+     * @param json representation according to the given message specification.
+     * @param messageIdentifier The given JSON representation shall be interpreted
+     *        as the specified message.
+     * @return Proto-encoded Envelope including OD4-header or empty string.
+     */
+    std::string getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier) noexcept;
+
+   private:
+    std::vector<cluon::MetaMessage> m_listOfMetaMessages{};
+    std::map<int32_t, cluon::MetaMessage> m_scopeOfMetaMessages{};
+};
+} // namespace cluon
 #endif
 /*
  * Copyright (C) 2017-2018  Christian Berger
@@ -7305,19 +7315,22 @@ class LIBCLUON_API OD4Session {
      */
     template <typename T>
     void send(T &message, const cluon::data::TimeStamp &sampleTimeStamp = cluon::data::TimeStamp(), uint32_t senderStamp = 0) noexcept {
-        cluon::ToProtoVisitor protoEncoder;
+        try {
+            std::lock_guard<std::mutex> lck(m_senderMutex);
+            cluon::ToProtoVisitor protoEncoder;
 
-        cluon::data::Envelope envelope;
-        {
-            envelope.dataType(static_cast<int32_t>(message.ID()));
-            message.accept(protoEncoder);
-            envelope.serializedData(protoEncoder.encodedData());
-            envelope.sent(cluon::time::now());
-            envelope.sampleTimeStamp((0 == (sampleTimeStamp.seconds() + sampleTimeStamp.microseconds())) ? envelope.sent() : sampleTimeStamp);
-            envelope.senderStamp(senderStamp);
-        }
+            cluon::data::Envelope envelope;
+            {
+                envelope.dataType(static_cast<int32_t>(message.ID()));
+                message.accept(protoEncoder);
+                envelope.serializedData(protoEncoder.encodedData());
+                envelope.sent(cluon::time::now());
+                envelope.sampleTimeStamp((0 == (sampleTimeStamp.seconds() + sampleTimeStamp.microseconds())) ? envelope.sent() : sampleTimeStamp);
+                envelope.senderStamp(senderStamp);
+            }
 
-        send(std::move(envelope));
+            send(std::move(envelope));
+        } catch (...) {}
     }
 
    public:
@@ -7330,6 +7343,8 @@ class LIBCLUON_API OD4Session {
    private:
     cluon::UDPReceiver m_receiver;
     cluon::UDPSender m_sender;
+
+    std::mutex m_senderMutex{};
 
     std::function<void(cluon::data::Envelope &&envelope)> m_delegate{nullptr};
 
@@ -9858,9 +9873,9 @@ inline void FromMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::
 //#include "cluon/FromJSONVisitor.hpp"
 //#include "cluon/stringtoolbox.hpp"
 
-#include <cstring>
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <iterator>
 #include <regex>
 #include <sstream>
@@ -9876,7 +9891,8 @@ inline FromJSONVisitor::FromJSONVisitor(std::map<std::string, FromJSONVisitor::J
     : m_keyValues{preset} {}
 
 inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::readKeyValues(std::string &input) noexcept {
-    const std::string MATCH_JSON = R"((?:\"|\')(?:[^"]*)(?:\"|\')(?=:)(?:\:\s*)(?:\"|\')?(?:true|false|[\-]{0,1}[0-9]+[\.][0-9]+|[\-]{0,1}[0-9]+|[0-9a-zA-Z\+\-\,\.\$\ \=]*)(?:\"|\')?)";
+    const std::string MATCH_JSON
+        = R"((?:\"|\')(?:[^"]*)(?:\"|\')(?=:)(?:\:\s*)(?:\"|\')?(?:true|false|[\-]{0,1}[0-9]+[\.][0-9]+|[\-]{0,1}[0-9]+|[0-9a-zA-Z\+\-\,\.\$\ \=]*)(?:\"|\')?)";
 
     std::map<std::string, FromJSONVisitor::JSONKeyValue> result;
     std::string oldInput;
@@ -9888,43 +9904,42 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
             if (m.size() > 0) {
                 std::string match{m[0]};
                 std::vector<std::string> retVal = stringtoolbox::split(match, ':');
-                if ( (retVal.size() == 1) || ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0) ) ) {
+                if ((retVal.size() == 1) || ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0))) {
                     std::string keyOfNestedObject{stringtoolbox::trim(retVal[0])};
                     keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[0];
                     {
                         std::string suffix(m.suffix());
-                        suffix = stringtoolbox::trim(suffix);
+                        suffix   = stringtoolbox::trim(suffix);
                         oldInput = input;
-                        input = suffix;
+                        input    = suffix;
                     }
 
                     auto mapOfNestedValues = readKeyValues(input);
 
                     JSONKeyValue kv;
-                    kv.m_key = keyOfNestedObject;
-                    kv.m_type = JSONConstants::OBJECT;
+                    kv.m_key   = keyOfNestedObject;
+                    kv.m_type  = JSONConstants::OBJECT;
                     kv.m_value = mapOfNestedValues;
 
                     result[keyOfNestedObject] = kv;
                 }
-                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0) ) {
+                if ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0)) {
                     auto e = std::make_pair(stringtoolbox::trim(retVal[0]), stringtoolbox::trim(retVal[1]));
 
                     JSONKeyValue kv;
                     kv.m_key = stringtoolbox::split(e.first, '"')[0];
 
-                    if ( (e.second.size() > 0) && (e.second.at(0) == '"') ) {
-                        kv.m_type = JSONConstants::STRING;
+                    if ((e.second.size() > 0) && (e.second.at(0) == '"')) {
+                        kv.m_type  = JSONConstants::STRING;
                         kv.m_value = std::string(e.second).substr(1);
-                    }
-                    else if ( (e.second.size() > 0) && ( (e.second == "false") || (e.second == "true") ) ) {
-                        kv.m_type = (e.second == "true" ? JSONConstants::IS_TRUE : JSONConstants::IS_FALSE);
+                    } else if ((e.second.size() > 0) && ((e.second == "false") || (e.second == "true"))) {
+                        kv.m_type  = (e.second == "true" ? JSONConstants::IS_TRUE : JSONConstants::IS_FALSE);
                         kv.m_value = e.second == "true";
-                    }
-                    else {
+                    } else {
                         kv.m_type = JSONConstants::NUMBER;
                         std::stringstream tmp(e.second);
-                        double v; tmp >> v;
+                        double v;
+                        tmp >> v;
                         kv.m_value = v;
                     }
 
@@ -9932,9 +9947,9 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
 
                     {
                         std::string suffix(m.suffix());
-                        suffix = stringtoolbox::trim(suffix);
+                        suffix   = stringtoolbox::trim(suffix);
                         oldInput = input;
-                        input = suffix;
+                        input    = suffix;
                         if (suffix.size() > 0 && suffix.at(0) == '}') {
                             break; // Nested payload complete; return.
                         }
@@ -9943,8 +9958,7 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
             }
         } while (!m.empty() && (oldInput != input));
     } catch (std::regex_error &) {
-    } catch (std::bad_cast &) {
-    }
+    } catch (std::bad_cast &) {}
 
     return result;
 }
@@ -9957,7 +9971,7 @@ inline void FromJSONVisitor::decodeFrom(std::istream &in) noexcept {
     std::copy(it, it_end, std::insert_iterator<std::string>(s, s.begin()));
 
     // Remove whitespace characters like newline, carriage return, or tab.
-    s.erase(std::remove_if( s.begin(), s.end(), [](char c){ return (c =='\r' || c =='\t' || c == '\n');}), s.end() );
+    s.erase(std::remove_if(s.begin(), s.end(), [](char c) { return (c == '\r' || c == '\t' || c == '\n'); }), s.end());
 
     // Parse JSON from in.
     m_keyValues = readKeyValues(s);
@@ -9970,7 +9984,8 @@ inline std::string FromJSONVisitor::decodeBase64(const std::string &input) const
     std::string decoded;
     for (uint32_t i{0}; i < input.size(); i++) {
         char c;
-        for (c = 0 ; c < 64 && (ALPHABET.at(static_cast<uint8_t>(c)) != input.at(i)); c++);
+        for (c = 0; c < 64 && (ALPHABET.at(static_cast<uint8_t>(c)) != input.at(i)); c++)
+            ;
 
         buffer[counter++] = c;
         if (4 == counter) {
@@ -10002,11 +10017,9 @@ inline void FromJSONVisitor::visit(uint32_t id, std::string &&typeName, std::str
         try {
             if (JSONConstants::IS_FALSE == m_keyValues[name].m_type) {
                 v = false;
-            }
-            else if (JSONConstants::IS_TRUE == m_keyValues[name].m_type) {
+            } else if (JSONConstants::IS_TRUE == m_keyValues[name].m_type) {
                 v = true;
-            }
-            else if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
+            } else if (JSONConstants::NUMBER == m_keyValues[name].m_type) {
                 v = (1 == static_cast<uint32_t>(linb::any_cast<double>(m_keyValues[name].m_value)));
             }
         } catch (const linb::bad_any_cast &) { // LCOV_EXCL_LINE
@@ -11628,13 +11641,13 @@ inline bool OD4Session::dataTrigger(int32_t messageIdentifier, std::function<voi
 }
 
 inline void OD4Session::callback(std::string &&data, std::string &&from, std::chrono::system_clock::time_point &&timepoint) noexcept {
+    (void)from;
     std::stringstream sstr(data);
     auto retVal = extractEnvelope(sstr);
 
     if (retVal.first) {
-        cluon::data::TimeStamp receivedAt{cluon::time::convert(timepoint)};
         cluon::data::Envelope env{retVal.second};
-        env.received(receivedAt);
+        env.received(cluon::time::convert(timepoint));
 
         // "Catch all"-delegate.
         if (nullptr != m_delegate) {
@@ -11646,9 +11659,6 @@ inline void OD4Session::callback(std::string &&data, std::string &&from, std::ch
                 std::lock_guard<std::mutex> lck{m_mapOfDataTriggeredDelegatesMutex};
                 if (m_mapOfDataTriggeredDelegates.count(env.dataType()) > 0) {
                     m_mapOfDataTriggeredDelegates[env.dataType()](std::move(env));
-                } else {
-                    std::cout << "[cluon::OD4Session] Received " << data.size() << " bytes from " << from << " at " << receivedAt.seconds() << "."
-                              << receivedAt.microseconds() << "." << std::endl;
                 }
             } catch (...) {} // LCOV_EXCL_LINE
         }
@@ -11831,19 +11841,22 @@ inline void ToODVDVisitor::visit(uint32_t id, std::string &&typeName, std::strin
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//#include "cluon/EnvelopeToJSON.hpp"
+//#include "cluon/EnvelopeConverter.hpp"
 //#include "cluon/Envelope.hpp"
+//#include "cluon/FromJSONVisitor.hpp"
 //#include "cluon/FromProtoVisitor.hpp"
 //#include "cluon/GenericMessage.hpp"
 //#include "cluon/MessageParser.hpp"
 //#include "cluon/ToJSONVisitor.hpp"
+//#include "cluon/ToProtoVisitor.hpp"
 
 #include <algorithm>
 #include <sstream>
+#include <utility>
 
 namespace cluon {
 
-inline int32_t EnvelopeToJSON::setMessageSpecification(const std::string &ms) noexcept {
+inline int32_t EnvelopeConverter::setMessageSpecification(const std::string &ms) noexcept {
     int32_t retVal{-1};
 
     m_listOfMetaMessages.clear();
@@ -11859,7 +11872,7 @@ inline int32_t EnvelopeToJSON::setMessageSpecification(const std::string &ms) no
     return retVal;
 }
 
-inline std::string EnvelopeToJSON::getJSONFromProtoEncodedEnvelope(const std::string &protoEncodedEnvelope) noexcept {
+inline std::string EnvelopeConverter::getJSONFromProtoEncodedEnvelope(const std::string &protoEncodedEnvelope) noexcept {
     std::string retVal{"{}"};
     if (!m_listOfMetaMessages.empty()) {
         cluon::data::Envelope envelope;
@@ -11894,7 +11907,7 @@ inline std::string EnvelopeToJSON::getJSONFromProtoEncodedEnvelope(const std::st
     return retVal;
 }
 
-inline std::string EnvelopeToJSON::getJSONFromEnvelope(cluon::data::Envelope &envelope) noexcept {
+inline std::string EnvelopeConverter::getJSONFromEnvelope(cluon::data::Envelope &envelope) noexcept {
     std::string retVal{"{}"};
     if (!m_listOfMetaMessages.empty()) {
         if (0 < m_scopeOfMetaMessages.count(envelope.dataType())) {
@@ -11927,6 +11940,36 @@ inline std::string EnvelopeToJSON::getJSONFromEnvelope(cluon::data::Envelope &en
 
             retVal = '{' + envelopeToJSON.json() + ',' + '\n' + '"' + tmp + '"' + ':' + '{' + payloadToJSON.json() + '}' + '}';
         }
+    }
+    return retVal;
+}
+
+inline std::string EnvelopeConverter::getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier) noexcept {
+    std::string retVal;
+    if (0 < m_scopeOfMetaMessages.count(messageIdentifier)) {
+        // Get specification for message to be created.
+        cluon::MetaMessage message{m_scopeOfMetaMessages[messageIdentifier]};
+
+        // Create "empty" instance for the required message as GenericMessage.
+        cluon::GenericMessage gm;
+        gm.createFrom(message, m_listOfMetaMessages);
+
+        // Parse data from given JSON.
+        std::stringstream sstr{json};
+        cluon::FromJSONVisitor jsonDecoder;
+        jsonDecoder.decodeFrom(sstr);
+
+        // Set values in the newly created GenericMessage from JSONDecoder.
+        gm.accept(jsonDecoder);
+
+        // Finally, transform GenericMessage into Envelope.
+        ToProtoVisitor protoEncoder;
+        gm.accept(protoEncoder);
+
+        cluon::data::Envelope env;
+        env.dataType(messageIdentifier).serializedData(protoEncoder.encodedData());
+
+        retVal = cluon::serializeEnvelope(std::move(env));
     }
     return retVal;
 }
