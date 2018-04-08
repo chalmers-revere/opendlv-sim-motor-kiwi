@@ -23,9 +23,9 @@
 SingleTrackModel::SingleTrackModel() noexcept:
   m_groundSteeringAngleMutex{},
   m_pedalPositionMutex{},
-  m_longitudinalSpeed{0.0},
-  m_lateralSpeed{0.0},
-  m_yawRate{0.0},
+  m_longitudinalSpeed{0.0f},
+  m_lateralSpeed{0.0f},
+  m_yawRate{0.0f},
   m_groundSteeringAngle{0.0f},
   m_pedalPosition{0.0f}
 {
@@ -48,12 +48,12 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
   double const pedalSpeedGain{0.5};
 
   double const mass{1.0};
-  double const momentOfInertiaZ{0.01};
+  double const momentOfInertiaZ{0.1};
   double const length{0.22};
   double const frontToCog{0.11};
   double const rearToCog{length - frontToCog};
-  double const corneringStiffnessFront{10.0};
-  double const corneringStiffnessRear{10.0};
+  double const corneringStiffnessFront{1.0};
+  double const corneringStiffnessRear{1.0};
   
   float groundSteeringAngleCopy;
   float pedalPositionCopy;
@@ -66,7 +66,7 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
 
   m_longitudinalSpeed = pedalPositionCopy * pedalSpeedGain;
 
-  if (std::abs(m_longitudinalSpeed) > 1e-4) {
+  if (std::abs(m_longitudinalSpeed) > 0.01f) {
     double const slipAngleFront = groundSteeringAngleCopy 
       - (m_lateralSpeed + frontToCog * m_yawRate) 
       / std::abs(m_longitudinalSpeed);
@@ -80,11 +80,14 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
     double const yawRateDot = (frontToCog * corneringStiffnessFront * slipAngleFront 
         - rearToCog * corneringStiffnessRear * slipAngleRear)
       / momentOfInertiaZ;
-
+    
     m_lateralSpeed += lateralSpeedDot * dt;
     m_yawRate += yawRateDot * dt;
+  } else {
+    m_lateralSpeed = 0.0f;
+    m_yawRate = 0.0f;
   }
-  
+
   opendlv::sim::KinematicState kinematicState;
   kinematicState.vx(static_cast<float>(m_longitudinalSpeed));
   kinematicState.vy(static_cast<float>(m_lateralSpeed));

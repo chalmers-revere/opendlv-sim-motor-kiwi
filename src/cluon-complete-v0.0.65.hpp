@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Wed, 04 Apr 2018 22:16:26 +0200
-// Version: 0.0.63
+// Date: Sun, 08 Apr 2018 11:45:30 +0200
+// Version: 0.0.65
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -6564,9 +6564,10 @@ class LIBCLUON_API EnvelopeConverter {
      * @param json representation according to the given message specification.
      * @param messageIdentifier The given JSON representation shall be interpreted
      *        as the specified message.
+     * @param senderStamp to be used in the Envelope.
      * @return Proto-encoded Envelope including OD4-header or empty string.
      */
-    std::string getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier) noexcept;
+    std::string getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier, uint32_t senderStamp) noexcept;
 
    private:
     std::vector<cluon::MetaMessage> m_listOfMetaMessages{};
@@ -7207,6 +7208,7 @@ class LIBCLUON_API LCMToGenericMessage {
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -7330,7 +7332,7 @@ class LIBCLUON_API OD4Session {
             }
 
             send(std::move(envelope));
-        } catch (...) {}
+        } catch (...) {} // LCOV_EXCL_LINE
     }
 
    public:
@@ -7341,7 +7343,7 @@ class LIBCLUON_API OD4Session {
     void sendInternal(std::string &&dataToSend) noexcept;
 
    private:
-    cluon::UDPReceiver m_receiver;
+    std::unique_ptr<cluon::UDPReceiver> m_receiver;
     cluon::UDPSender m_sender;
 
     std::mutex m_senderMutex{};
@@ -9957,8 +9959,8 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
                 }
             }
         } while (!m.empty() && (oldInput != input));
-    } catch (std::regex_error &) {
-    } catch (std::bad_cast &) {}
+    } catch (std::regex_error &) { // LCOV_EXCL_LINE
+    } catch (std::bad_cast &) {}   // LCOV_EXCL_LINE
 
     return result;
 }
@@ -11582,15 +11584,16 @@ inline void ToMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::st
 namespace cluon {
 
 inline OD4Session::OD4Session(uint16_t CID, std::function<void(cluon::data::Envelope &&envelope)> delegate) noexcept
-    : m_receiver{"225.0.0." + std::to_string(CID),
-                 12175,
+    : m_receiver{nullptr}
+    , m_sender{"225.0.0." + std::to_string(CID), 12175}
+    , m_delegate(std::move(delegate))
+    , m_mapOfDataTriggeredDelegatesMutex{}
+    , m_mapOfDataTriggeredDelegates{} {
+    m_receiver = std::make_unique<cluon::UDPReceiver>("225.0.0." + std::to_string(CID), 12175,
                  [this](std::string &&data, std::string &&from, std::chrono::system_clock::time_point &&timepoint) {
                      this->callback(std::move(data), std::move(from), std::move(timepoint));
-                 }}
-    , m_sender{"225.0.0." + std::to_string(CID), 12175}
-    , m_delegate(delegate)
-    , m_mapOfDataTriggeredDelegatesMutex{}
-    , m_mapOfDataTriggeredDelegates{} {}
+                 });
+}
 
 inline void OD4Session::timeTrigger(float freq, std::function<bool()> delegate) noexcept {
     if (nullptr != delegate) {
@@ -11640,8 +11643,7 @@ inline bool OD4Session::dataTrigger(int32_t messageIdentifier, std::function<voi
     return retVal;
 }
 
-inline void OD4Session::callback(std::string &&data, std::string &&from, std::chrono::system_clock::time_point &&timepoint) noexcept {
-    (void)from;
+inline void OD4Session::callback(std::string &&data, std::string &&/*from*/, std::chrono::system_clock::time_point &&timepoint) noexcept {
     std::stringstream sstr(data);
     auto retVal = extractEnvelope(sstr);
 
@@ -11651,7 +11653,6 @@ inline void OD4Session::callback(std::string &&data, std::string &&from, std::ch
 
         // "Catch all"-delegate.
         if (nullptr != m_delegate) {
-            cluon::data::Envelope env1{retVal.second};
             m_delegate(std::move(env));
         } else {
             try {
@@ -11674,7 +11675,7 @@ inline void OD4Session::sendInternal(std::string &&dataToSend) noexcept {
 }
 
 inline bool OD4Session::isRunning() noexcept {
-    return m_receiver.isRunning();
+    return m_receiver->isRunning();
 }
 
 } // namespace cluon
@@ -11944,7 +11945,7 @@ inline std::string EnvelopeConverter::getJSONFromEnvelope(cluon::data::Envelope 
     return retVal;
 }
 
-inline std::string EnvelopeConverter::getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier) noexcept {
+inline std::string EnvelopeConverter::getProtoEncodedEnvelopeFromJSONWithoutTimeStamps(const std::string &json, int32_t messageIdentifier, uint32_t senderStamp) noexcept {
     std::string retVal;
     if (0 < m_scopeOfMetaMessages.count(messageIdentifier)) {
         // Get specification for message to be created.
@@ -11967,7 +11968,9 @@ inline std::string EnvelopeConverter::getProtoEncodedEnvelopeFromJSONWithoutTime
         gm.accept(protoEncoder);
 
         cluon::data::Envelope env;
-        env.dataType(messageIdentifier).serializedData(protoEncoder.encodedData());
+        env.dataType(messageIdentifier)
+           .serializedData(protoEncoder.encodedData())
+           .senderStamp(senderStamp);
 
         retVal = cluon::serializeEnvelope(std::move(env));
     }
