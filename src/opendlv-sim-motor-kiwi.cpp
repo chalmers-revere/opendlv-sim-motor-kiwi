@@ -61,7 +61,7 @@ int32_t main(int32_t argc, char **argv) {
       {
         opendlv::sim::KinematicState kinematicState = singleTrackModel.step(DT);
 
-        cluon::data::TimeStamp sampleTime;
+        cluon::data::TimeStamp sampleTime = cluon::time::now();
         od4.send(kinematicState, sampleTime, FRAME_ID);
         if (VERBOSE) {
           std::cout << "Kinematic state with id " << FRAME_ID
