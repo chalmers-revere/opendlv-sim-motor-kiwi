@@ -29,6 +29,7 @@ int32_t main(int32_t argc, char **argv) {
       << "platform." << std::endl
       << "Usage:   " << argv[0] << " --frame-id=<ID of frame (used for "
       << "integration)> --freq=<Model frequency> --cid=<od4 session> "
+      << "[--timemod=<Time scale modifier for simulation speed. Default: 1.0>] "
       << "[--input-id=<Sender stamp of control signals. Default: 0>]" 
       << std::endl
       << "Example: " << argv[0] << " --frame-id=0 --freq=100 --cid=111" 
@@ -40,6 +41,8 @@ int32_t main(int32_t argc, char **argv) {
     uint32_t const FRAME_ID = std::stoi(commandlineArguments["frame-id"]);
     uint32_t const INPUT_ID = (commandlineArguments.count("input-id") != 0) ?
       std::stoi(commandlineArguments["input-id"]) : 0;
+    float const TIMEMOD{(commandlineArguments["timemod"].size() != 0) 
+      ? static_cast<float>(std::stof(commandlineArguments["timemod"])) : 1.0f};
     float const FREQ = std::stof(commandlineArguments["freq"]);
     double const DT = 1.0 / FREQ;
     
@@ -93,7 +96,7 @@ int32_t main(int32_t argc, char **argv) {
         return true;
       }};
 
-    od4.timeTrigger(FREQ, atFrequency);
+    od4.timeTrigger(TIMEMOD * FREQ, atFrequency);
   }
   return retCode;
 }
