@@ -22,42 +22,60 @@
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
-  if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("freq") || 0 == commandlineArguments.count("frame-id")) {
-    std::cerr << argv[0] << " is a dynamics model for the Chalmers Kiwi platform." << std::endl;
-    std::cerr << "Usage:   " << argv[0] << " --frame-id=<ID of frame (used for integration)> --freq=<Model frequency> --cid=<OpenDaVINCI session>" << std::endl;
-    std::cerr << "Example: " << argv[0] << " --frame-id=0 --freq=100 --cid=111" << std::endl;
+  if (0 == commandlineArguments.count("cid") 
+      || 0 == commandlineArguments.count("freq") 
+      || 0 == commandlineArguments.count("frame-id")) {
+    std::cerr << argv[0] << " is a dynamics model for the Chalmers Kiwi "
+      << "platform." << std::endl
+      << "Usage:   " << argv[0] << " --frame-id=<ID of frame (used for "
+      << "integration)> --freq=<Model frequency> --cid=<od4 session> "
+      << "[--input-id=<Sender stamp of control signals. Default: 0>]" 
+      << std::endl
+      << "Example: " << argv[0] << " --frame-id=0 --freq=100 --cid=111" 
+      << std::endl;
     retCode = 1;
   } else {
     bool const VERBOSE{commandlineArguments.count("verbose") != 0};
     uint16_t const CID = std::stoi(commandlineArguments["cid"]);
     uint32_t const FRAME_ID = std::stoi(commandlineArguments["frame-id"]);
+    uint32_t const INPUT_ID = (commandlineArguments.count("input-id") != 0) ?
+      std::stoi(commandlineArguments["input-id"]) : 0;
     float const FREQ = std::stof(commandlineArguments["freq"]);
     double const DT = 1.0 / FREQ;
     
     SingleTrackModel singleTrackModel;
 
-    auto onGroundSteeringRequest{[&FRAME_ID, &singleTrackModel](cluon::data::Envelope &&envelope)
+    auto onGroundSteeringRequest{[&singleTrackModel, &INPUT_ID](
+        cluon::data::Envelope &&envelope)
       {
         uint32_t const senderStamp = envelope.senderStamp();
-        if (FRAME_ID == senderStamp) {
-          auto groundSteeringAngleRequest = cluon::extractMessage<opendlv::proxy::GroundSteeringRequest>(std::move(envelope));
+        if (senderStamp == INPUT_ID) {
+          auto groundSteeringAngleRequest = 
+            cluon::extractMessage<opendlv::proxy::GroundSteeringRequest>(
+                std::move(envelope));
           singleTrackModel.setGroundSteeringAngle(groundSteeringAngleRequest);
         }
       }};
-    auto onPedalPositionRequest{[&FRAME_ID, &singleTrackModel](cluon::data::Envelope &&envelope)
+    auto onPedalPositionRequest{[&singleTrackModel, &INPUT_ID](
+        cluon::data::Envelope &&envelope)
       {
         uint32_t const senderStamp = envelope.senderStamp();
-        if (FRAME_ID == senderStamp) {
-          auto pedalPositionRequest = cluon::extractMessage<opendlv::proxy::PedalPositionRequest>(std::move(envelope));
+        if (senderStamp == INPUT_ID) {
+          auto pedalPositionRequest = 
+            cluon::extractMessage<opendlv::proxy::PedalPositionRequest>(
+                std::move(envelope));
           singleTrackModel.setPedalPosition(pedalPositionRequest);
         }
       }};
 
     cluon::OD4Session od4{CID};
-    od4.dataTrigger(opendlv::proxy::GroundSteeringRequest::ID(), onGroundSteeringRequest);
-    od4.dataTrigger(opendlv::proxy::PedalPositionRequest::ID(), onPedalPositionRequest);
+    od4.dataTrigger(opendlv::proxy::GroundSteeringRequest::ID(),
+        onGroundSteeringRequest);
+    od4.dataTrigger(opendlv::proxy::PedalPositionRequest::ID(),
+        onPedalPositionRequest);
 
-    auto atFrequency{[&FRAME_ID, &VERBOSE, &DT, &singleTrackModel, &od4]() -> bool
+    auto atFrequency{[&FRAME_ID, &VERBOSE, &DT, &singleTrackModel, &od4]() 
+      -> bool
       {
         opendlv::sim::KinematicState kinematicState = singleTrackModel.step(DT);
 
@@ -65,11 +83,13 @@ int32_t main(int32_t argc, char **argv) {
         od4.send(kinematicState, sampleTime, FRAME_ID);
         if (VERBOSE) {
           std::cout << "Kinematic state with id " << FRAME_ID
-            << " is at velocity [vx=" << kinematicState.vx() << ", vy=" << kinematicState.vy() << ", vz="
-            << kinematicState.vz() << "] with the rotation rate [rollRate=" << kinematicState.rollRate() << ", pitchRate="
-            << kinematicState.pitchRate() << ", yawRate=" << kinematicState.yawRate() << "]." << std::endl;
+            << " is at velocity [vx=" << kinematicState.vx() 
+            << ", vy=" << kinematicState.vy() << ", vz=" << kinematicState.vz() 
+            << "] with the rotation rate [rollRate=" 
+            << kinematicState.rollRate() << ", pitchRate=" 
+            << kinematicState.pitchRate() << ", yawRate=" 
+            << kinematicState.yawRate() << "]." << std::endl;
         }
-
         return true;
       }};
 

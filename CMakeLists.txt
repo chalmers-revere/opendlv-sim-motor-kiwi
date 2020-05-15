@@ -20,7 +20,7 @@ project(opendlv-sim-motor-kiwi)
 ################################################################################
 # Defining the relevant versions of OpenDLV Standard Message Set and libcluon.
 set(OPENDLV_STANDARD_MESSAGE_SET opendlv-standard-message-set-v0.9.4.odvd)
-set(CLUON_COMPLETE cluon-complete-v0.0.121.hpp)
+set(CLUON_COMPLETE cluon-complete-v0.0.127.hpp)
 
 ################################################################################
 # This project requires C++14 or newer.
@@ -80,13 +80,6 @@ set(LIBRARIES Threads::Threads)
 # Create executable.
 add_executable(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp $<TARGET_OBJECTS:${PROJECT_NAME}-core>)
 target_link_libraries(${PROJECT_NAME} ${LIBRARIES})
-
-################################################################################
-# Enable unit testing.
-enable_testing()
-add_executable(${PROJECT_NAME}-runner ${CMAKE_CURRENT_SOURCE_DIR}/test/test-single-track-model.cpp $<TARGET_OBJECTS:${PROJECT_NAME}-core>)
-target_link_libraries(${PROJECT_NAME}-runner ${LIBRARIES})
-add_test(NAME ${PROJECT_NAME}-runner COMMAND ${PROJECT_NAME}-runner)
 
 ################################################################################
 # Install executable.

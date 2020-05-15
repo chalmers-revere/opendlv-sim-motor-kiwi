@@ -45,15 +45,18 @@ void SingleTrackModel::setPedalPosition(opendlv::proxy::PedalPositionRequest con
 
 opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
 {
-  double const pedalSpeedGain{0.5};
+  double const pedalForceGainForward{26.0};
+  double const pedalForceGainReverse{5.0};
 
-  double const mass{1.0};
-  double const momentOfInertiaZ{0.1};
-  double const length{0.22};
-  double const frontToCog{0.11};
-  double const rearToCog{length - frontToCog};
-  double const corneringStiffnessFront{1.0};
-  double const corneringStiffnessRear{1.0};
+  double const resistanceGain{4.0};
+
+  double const mass{1.113};
+  double const momentOfInertiaZ{0.01};
+  double const wheelBase{0.224};
+  double const frontToCog{0.12};
+  double const rearToCog{wheelBase - frontToCog};
+  double const corneringStiffnessFront{15.0};
+  double const corneringStiffnessRear{15.0};
   
   float groundSteeringAngleCopy;
   float pedalPositionCopy;
@@ -64,9 +67,31 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
     pedalPositionCopy = m_pedalPosition;
   }
 
-  m_longitudinalSpeed = pedalPositionCopy * pedalSpeedGain;
+  groundSteeringAngleCopy = (groundSteeringAngleCopy / 0.290888f) * 0.6f;
 
-  if (std::abs(m_longitudinalSpeed) > 0.01f) {
+  pedalPositionCopy = (pedalPositionCopy < 0.14f) ? pedalPositionCopy : 0.14f;
+  pedalPositionCopy = (pedalPositionCopy > -0.9f) ? pedalPositionCopy : -0.9f;
+  groundSteeringAngleCopy = (groundSteeringAngleCopy < 0.6f) 
+    ? groundSteeringAngleCopy : 0.6f;
+  groundSteeringAngleCopy = (groundSteeringAngleCopy > -0.6f) 
+    ? groundSteeringAngleCopy : -0.6f;
+
+  double propulsionForce;
+  double resistanceForce;
+  if (pedalPositionCopy > 0.0) {
+    propulsionForce = pedalPositionCopy * pedalForceGainForward;
+    resistanceForce = m_longitudinalSpeed * resistanceGain;
+  } else {
+    propulsionForce = pedalPositionCopy * pedalForceGainReverse;
+    resistanceForce = m_longitudinalSpeed * resistanceGain;
+  }
+    
+  double const longitudinalSpeedDot = 
+    (propulsionForce - resistanceForce) / mass;
+    
+  m_longitudinalSpeed += longitudinalSpeedDot * dt;
+
+  if (std::abs(m_longitudinalSpeed) > 0.1f) {
     double const slipAngleFront = groundSteeringAngleCopy 
       - (m_lateralSpeed + frontToCog * m_yawRate) 
       / std::abs(m_longitudinalSpeed);
@@ -75,8 +100,8 @@ opendlv::sim::KinematicState SingleTrackModel::step(double dt) noexcept
 
     double const lateralSpeedDot = (corneringStiffnessFront * slipAngleFront 
         + corneringStiffnessRear * slipAngleRear)
-      / (mass - m_longitudinalSpeed * m_yawRate);
-
+      / mass - m_longitudinalSpeed * m_yawRate;
+    
     double const yawRateDot = (frontToCog * corneringStiffnessFront * slipAngleFront 
         - rearToCog * corneringStiffnessRear * slipAngleRear)
       / momentOfInertiaZ;

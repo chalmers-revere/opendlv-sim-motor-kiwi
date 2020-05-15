@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Sun, 03 Mar 2019 20:03:13 +0100
-// Version: 0.0.121
+// Date: Sun, 03 Nov 2019 15:21:13 +0100
+// Version: 0.0.127
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -23,6 +23,26 @@
 #include <typeinfo>
 #include <type_traits>
 #include <stdexcept>
+
+
+#if defined(PARTICLE)
+#if !defined(__cpp_exceptions) && !defined(ANY_IMPL_NO_EXCEPTIONS) && !defined(ANY_IMPL_EXCEPTIONS)
+#   define ANY_IMPL_NO_EXCEPTIONS
+# endif
+#else
+// you can opt-out of exceptions by definining ANY_IMPL_NO_EXCEPTIONS,
+// but you must ensure not to cast badly when passing an `any' object to any_cast<T>(any)
+#endif
+
+#if defined(PARTICLE)
+#if !defined(__cpp_rtti) && !defined(ANY_IMPL_NO_RTTI) && !defined(ANY_IMPL_RTTI)
+#   define ANY_IMPL_NO_RTTI
+# endif
+#else
+// you can opt-out of RTTI by defining ANY_IMPL_NO_RTTI,
+// in order to disable functions working with the typeid of a type
+#endif
+
 
 namespace linb
 {
@@ -131,11 +151,13 @@ public:
         return this->vtable == nullptr;
     }
 
+#ifndef ANY_IMPL_NO_RTTI
     /// If *this has a contained object of type T, typeid(T); otherwise typeid(void).
     const std::type_info& type() const noexcept
     {
         return empty()? typeid(void) : this->vtable->type();
     }
+#endif
 
     /// Exchange the states of *this and rhs.
     void swap(any& rhs) noexcept
@@ -149,7 +171,7 @@ public:
             if(this->vtable != nullptr)
             {
                 this->vtable->move(this->storage, rhs.storage);
-                //this->vtable = nullptr; -- uneeded, see below
+                //this->vtable = nullptr; -- unneeded, see below
             }
 
             // move from tmp (previously rhs) to *this.
@@ -183,8 +205,10 @@ private: // Storage and Virtual Method Table
         // Note: The caller is responssible for doing .vtable = nullptr after destructful operations
         // such as destroy() and/or move().
 
+#ifndef ANY_IMPL_NO_RTTI
         /// The type of the object this vtable is for.
         const std::type_info& (*type)() noexcept;
+#endif
 
         /// Destroys the object in the union.
         /// The state of the union after this call is unspecified, caller must ensure not to use src anymore.
@@ -206,10 +230,12 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct vtable_dynamic
     {
+#ifndef ANY_IMPL_NO_RTTI
         static const std::type_info& type() noexcept
         {
             return typeid(T);
         }
+#endif
 
         static void destroy(storage_union& storage) noexcept
         {
@@ -239,10 +265,12 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct vtable_stack
     {
+#ifndef ANY_IMPL_NO_RTTI
         static const std::type_info& type() noexcept
         {
             return typeid(T);
         }
+#endif
 
         static void destroy(storage_union& storage) noexcept
         {
@@ -275,7 +303,7 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct requires_allocation :
         std::integral_constant<bool,
-                !(std::is_nothrow_move_constructible<T>::value      // N4562 �6.3/3 [any.class]
+                !(std::is_nothrow_move_constructible<T>::value      // N4562 §6.3/3 [any.class]
                   && sizeof(T) <= sizeof(storage_union::stack)
                   && std::alignment_of<T>::value <= std::alignment_of<storage_union::stack_storage_t>::value)>
     {};
@@ -286,7 +314,10 @@ private: // Storage and Virtual Method Table
     {
         using VTableType = typename std::conditional<requires_allocation<T>::value, vtable_dynamic<T>, vtable_stack<T>>::type;
         static vtable_type table = {
-            VTableType::type, VTableType::destroy,
+#ifndef ANY_IMPL_NO_RTTI
+            VTableType::type,
+#endif
+            VTableType::destroy,
             VTableType::copy, VTableType::move,
             VTableType::swap,
         };
@@ -298,27 +329,6 @@ protected:
     friend const T* any_cast(const any* operand) noexcept;
     template<typename T>
     friend T* any_cast(any* operand) noexcept;
-
-    /// Same effect as is_same(this->type(), t);
-    bool is_typed(const std::type_info& t) const
-    {
-        return is_same(this->type(), t);
-    }
-
-    /// Checks if two type infos are the same.
-    ///
-    /// If ANY_IMPL_FAST_TYPE_INFO_COMPARE is defined, checks only the address of the
-    /// type infos, otherwise does an actual comparision. Checking addresses is
-    /// only a valid approach when there's no interaction with outside sources
-    /// (other shared libraries and such).
-    static bool is_same(const std::type_info& a, const std::type_info& b)
-    {
-#ifdef ANY_IMPL_FAST_TYPE_INFO_COMPARE
-        return &a == &b;
-#else
-        return a == b;
-#endif
-    }
 
     /// Casts (with no type_info checks) the storage pointer as const T*.
     template<typename T>
@@ -391,7 +401,9 @@ template<typename ValueType>
 inline ValueType any_cast(const any& operand)
 {
     auto p = any_cast<typename std::add_const<typename std::remove_reference<ValueType>::type>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return *p;
 }
 
@@ -400,56 +412,55 @@ template<typename ValueType>
 inline ValueType any_cast(any& operand)
 {
     auto p = any_cast<typename std::remove_reference<ValueType>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return *p;
 }
 
 ///
-/// If ANY_IMPL_ANYCAST_MOVEABLE is not defined, does as N4562 specifies:
-///     Performs *any_cast<remove_reference_t<ValueType>>(&operand), or throws bad_any_cast on failure.
-///
-/// If ANY_IMPL_ANYCAST_MOVEABLE is defined, does as LWG Defect 2509 specifies:
-///     If ValueType is MoveConstructible and isn't a lvalue reference, performs
-///     std::move(*any_cast<remove_reference_t<ValueType>>(&operand)), otherwise
-///     *any_cast<remove_reference_t<ValueType>>(&operand). Throws bad_any_cast on failure.
+/// If ValueType is MoveConstructible and isn't a lvalue reference, performs
+/// std::move(*any_cast<remove_reference_t<ValueType>>(&operand)), otherwise
+/// *any_cast<remove_reference_t<ValueType>>(&operand). Throws bad_any_cast on failure.
 ///
 template<typename ValueType>
 inline ValueType any_cast(any&& operand)
 {
-#ifdef ANY_IMPL_ANY_CAST_MOVEABLE
-    // https://cplusplus.github.io/LWG/lwg-active.html#2509
     using can_move = std::integral_constant<bool,
         std::is_move_constructible<ValueType>::value
         && !std::is_lvalue_reference<ValueType>::value>;
-#else
-    using can_move = std::false_type;
-#endif
 
     auto p = any_cast<typename std::remove_reference<ValueType>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return detail::any_cast_move_if_true<ValueType>(p, can_move());
 }
 
 /// If operand != nullptr && operand->type() == typeid(ValueType), a pointer to the object
 /// contained by operand, otherwise nullptr.
-template<typename T>
-inline const T* any_cast(const any* operand) noexcept
+template<typename ValueType>
+inline const ValueType* any_cast(const any* operand) noexcept
 {
-    if(operand == nullptr || !operand->is_typed(typeid(T)))
-        return nullptr;
+    using T = typename std::decay<ValueType>::type;
+
+    if (operand && operand->vtable == any::vtable_for_type<T>())
+        return operand->cast<ValueType>();
     else
-        return operand->cast<T>();
+        return nullptr;
 }
 
 /// If operand != nullptr && operand->type() == typeid(ValueType), a pointer to the object
 /// contained by operand, otherwise nullptr.
-template<typename T>
-inline T* any_cast(any* operand) noexcept
+template<typename ValueType>
+inline ValueType* any_cast(any* operand) noexcept
 {
-    if(operand == nullptr || !operand->is_typed(typeid(T)))
-        return nullptr;
+    using T = typename std::decay<ValueType>::type;
+
+    if (operand && operand->vtable == any::vtable_for_type<T>())
+        return operand->cast<ValueType>();
     else
-        return operand->cast<T>();
+        return nullptr;
 }
 
 }
@@ -474,6 +485,7 @@ namespace std
 #define CPPPEGLIB_PEGLIB_H
 
 #include <algorithm>
+#include <cctype>
 #include <cassert>
 #include <cstring>
 #include <functional>
@@ -495,7 +507,7 @@ namespace std
 #define PEGLIB_NO_CONSTEXPR_SUPPORT
 #elif (_MSC_VER >= 1800)
 // good to go
-#else (_MSC_VER < 1800)
+#else //(_MSC_VER < 1800)
 #error "Requires C+11 support"
 #endif
 #endif
@@ -505,12 +517,6 @@ namespace std
 //#define PEGLIB_NO_UNICODE_CHARS
 
 namespace peg {
-
-#if __clang__ == 1 && __clang_major__ <= 5
-static void* enabler = nullptr; // workaround for Clang version <= 5.0.0
-#else
-extern void* enabler;
-#endif
 
 /*-----------------------------------------------------------------------------
  *  any
@@ -561,7 +567,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<!std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<!std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     T& get() {
         if (!content_) {
@@ -577,7 +583,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     T& get() {
         return *this;
@@ -585,7 +591,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<!std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<!std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     const T& get() const {
         assert(content_);
@@ -599,7 +605,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     const any& get() const {
         return *this;
@@ -903,6 +909,23 @@ inline std::pair<size_t, size_t> line_info(const char* start, const char* cur) {
 }
 
 /*
+* String tag
+*/
+#ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
+inline constexpr unsigned int str2tag(const char* str, int h = 0) {
+    return !str[h] ? 5381 : (str2tag(str, h + 1) * 33) ^ static_cast<unsigned char>(str[h]);
+}
+
+namespace udl {
+
+inline constexpr unsigned int operator "" _(const char* s, size_t) {
+    return str2tag(s);
+}
+
+}
+#endif
+
+/*
 * Semantic values
 */
 struct SemanticValues : protected std::vector<any>
@@ -918,6 +941,13 @@ struct SemanticValues : protected std::vector<any>
     std::string str() const {
         return std::string(s_, n_);
     }
+
+    // Definition name
+    const std::string& name() const { return name_; }
+
+#ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
+    std::vector<unsigned int> tags;
+#endif
 
     // Line number and column at which the matched string is
     std::pair<size_t, size_t> line_info() const {
@@ -983,6 +1013,7 @@ private:
     size_t      n_;
     size_t      choice_count_;
     size_t      choice_;
+    std::string name_;
 
     template <typename F>
     auto transform(F f) const -> vector<typename std::remove_const<decltype(f(any()))>::type> {
@@ -1020,7 +1051,7 @@ private:
  */
 template <
     typename R, typename F,
-    typename std::enable_if<std::is_void<R>::value>::type*& = enabler,
+    typename std::enable_if<std::is_void<R>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     fn(std::forward<Args>(args)...);
@@ -1029,7 +1060,7 @@ any call(F fn, Args&&... args) {
 
 template <
     typename R, typename F,
-    typename std::enable_if<std::is_same<typename std::remove_cv<R>::type, any>::value>::type*& = enabler,
+    typename std::enable_if<std::is_same<typename std::remove_cv<R>::type, any>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     return fn(std::forward<Args>(args)...);
@@ -1039,7 +1070,7 @@ template <
     typename R, typename F,
     typename std::enable_if<
         !std::is_void<R>::value &&
-        !std::is_same<typename std::remove_cv<R>::type, any>::value>::type*& = enabler,
+        !std::is_same<typename std::remove_cv<R>::type, any>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     return any(fn(std::forward<Args>(args)...));
@@ -1052,26 +1083,26 @@ public:
 
     Action(const Action& rhs) : fn_(rhs.fn_) {}
 
-    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     Action(F fn) : fn_(make_adaptor(fn, &F::operator())) {}
 
-    template <typename F, typename std::enable_if<std::is_pointer<F>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_pointer<F>::value, std::nullptr_t>::type = nullptr>
     Action(F fn) : fn_(make_adaptor(fn, fn)) {}
 
-    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     Action(F /*fn*/) {}
 
-    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     void operator=(F fn) {
         fn_ = make_adaptor(fn, &F::operator());
     }
 
-    template <typename F, typename std::enable_if<std::is_pointer<F>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_pointer<F>::value, std::nullptr_t>::type = nullptr>
     void operator=(F fn) {
         fn_ = make_adaptor(fn, fn);
     }
 
-    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     void operator=(F /*fn*/) {}
 
     Action& operator=(const Action& rhs) = default;
@@ -1326,6 +1357,7 @@ public:
         auto& sv = *value_stack[value_stack_size++];
         if (!sv.empty()) {
             sv.clear();
+            sv.tags.clear();
         }
         sv.reset();
         sv.path = path;
@@ -1427,6 +1459,7 @@ public:
             i += len;
         }
         sv.insert(sv.end(), chldsv.begin(), chldsv.end());
+        sv.tags.insert(sv.tags.end(), chldsv.tags.begin(), chldsv.tags.end());
         sv.s_ = chldsv.c_str();
         sv.n_ = chldsv.length();
         sv.tokens.insert(sv.tokens.end(), chldsv.tokens.begin(), chldsv.tokens.end());
@@ -1476,6 +1509,7 @@ public:
             auto len = rule.parse(s, n, chldsv, c, dt);
             if (success(len)) {
                 sv.insert(sv.end(), chldsv.begin(), chldsv.end());
+                sv.tags.insert(sv.tags.end(), chldsv.tags.begin(), chldsv.tags.end());
                 sv.s_ = chldsv.c_str();
                 sv.n_ = chldsv.length();
                 sv.choice_count_ = opes_.size();
@@ -1522,6 +1556,7 @@ public:
             } else {
                 if (sv.size() != save_sv_size) {
                     sv.erase(sv.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
+                    sv.tags.erase(sv.tags.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
                 }
                 if (sv.tokens.size() != save_tok_size) {
                     sv.tokens.erase(sv.tokens.begin() + static_cast<std::ptrdiff_t>(save_tok_size));
@@ -1580,6 +1615,7 @@ public:
             } else {
                 if (sv.size() != save_sv_size) {
                     sv.erase(sv.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
+                    sv.tags.erase(sv.tags.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
                 }
                 if (sv.tokens.size() != save_tok_size) {
                     sv.tokens.erase(sv.tokens.begin() + static_cast<std::ptrdiff_t>(save_tok_size));
@@ -1621,6 +1657,7 @@ public:
         } else {
             if (sv.size() != save_sv_size) {
                 sv.erase(sv.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
+                sv.tags.erase(sv.tags.begin() + static_cast<std::ptrdiff_t>(save_sv_size));
             }
             if (sv.tokens.size() != save_tok_size) {
                 sv.tokens.erase(sv.tokens.begin() + static_cast<std::ptrdiff_t>(save_tok_size));
@@ -1700,8 +1737,9 @@ class LiteralString : public Ope
     , public std::enable_shared_from_this<LiteralString>
 {
 public:
-    LiteralString(const std::string& s)
+    LiteralString(const std::string& s, bool ignore_case)
         : lit_(s)
+        , ignore_case_(ignore_case)
         , init_is_word_(false)
         , is_word_(false)
         {}
@@ -1711,6 +1749,7 @@ public:
     void accept(Visitor& v) override;
 
     std::string lit_;
+    bool ignore_case_;
     mutable bool init_is_word_;
     mutable bool is_word_;
 };
@@ -1746,7 +1785,7 @@ public:
             return static_cast<size_t>(-1);
         }
 
-        char32_t cp;
+        char32_t cp = '\0';
         auto len = decode_codepoint(s, n, cp);
 
         if (!ranges_.empty()) {
@@ -2031,8 +2070,12 @@ inline std::shared_ptr<Ope> npd(const std::shared_ptr<Ope>& ope) {
     return std::make_shared<NotPredicate>(ope);
 }
 
-inline std::shared_ptr<Ope> lit(const std::string& lit) {
-    return std::make_shared<LiteralString>(lit);
+inline std::shared_ptr<Ope> lit(const std::string& s) {
+    return std::make_shared<LiteralString>(s, false);
+}
+
+inline std::shared_ptr<Ope> liti(const std::string& s) {
+    return std::make_shared<LiteralString>(s, true);
 }
 
 inline std::shared_ptr<Ope> cls(const std::string& s) {
@@ -2114,8 +2157,6 @@ struct Ope::Visitor
 
 struct AssignIDToDefinition : public Ope::Visitor
 {
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2143,11 +2184,36 @@ struct AssignIDToDefinition : public Ope::Visitor
     std::unordered_map<void*, size_t> ids;
 };
 
+struct IsLiteralToken : public Ope::Visitor
+{
+    IsLiteralToken() : result_(false) {}
+
+    void visit(PrioritizedChoice& ope) override {
+        for (auto op: ope.opes_) {
+            if (!IsLiteralToken::check(*op)) {
+                return;
+            }
+        }
+        result_ = true;
+    }
+
+    void visit(LiteralString& /*ope*/) override {
+        result_ = true;
+    }
+
+    static bool check(Ope& ope) {
+        IsLiteralToken vis;
+        ope.accept(vis);
+        return vis.result_;
+    }
+
+private:
+    bool result_;
+};
+
 struct TokenChecker : public Ope::Visitor
 {
     TokenChecker() : has_token_boundary_(false), has_rule_(false) {}
-
-    using Ope::Visitor::visit;
 
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
@@ -2170,8 +2236,14 @@ struct TokenChecker : public Ope::Visitor
     void visit(Reference& ope) override;
     void visit(Whitespace& ope) override { ope.ope_->accept(*this); }
 
-    bool is_token() const {
-        return has_token_boundary_ || !has_rule_;
+    static bool is_token(Ope& ope) {
+        if (IsLiteralToken::check(ope)) {
+            return true;
+        }
+
+        TokenChecker vis;
+        ope.accept(vis);
+        return vis.has_token_boundary_ || !vis.has_rule_;
     }
 
 private:
@@ -2182,8 +2254,6 @@ private:
 struct DetectLeftRecursion : public Ope::Visitor {
     DetectLeftRecursion(const std::string& name)
         : error_s(nullptr), name_(name), done_(false) {}
-
-    using Ope::Visitor::visit;
 
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
@@ -2239,8 +2309,6 @@ struct ReferenceChecker : public Ope::Visitor {
         const std::vector<std::string>& params)
         : grammar_(grammar), params_(params) {}
 
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2279,8 +2347,6 @@ struct LinkReferences : public Ope::Visitor {
         const std::vector<std::string>& params)
         : grammar_(grammar), params_(params) {}
 
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2315,8 +2381,6 @@ struct FindReference : public Ope::Visitor {
         const std::vector<std::shared_ptr<Ope>>& args,
         const std::vector<std::string>& params)
         : args_(args), params_(params) {}
-
-    using Ope::Visitor::visit;
 
     void visit(Sequence& ope) override {
         std::vector<std::shared_ptr<Ope>> opes;
@@ -2357,6 +2421,24 @@ struct FindReference : public Ope::Visitor {
 private:
     const std::vector<std::shared_ptr<Ope>>& args_;
     const std::vector<std::string>& params_;
+};
+
+struct IsPrioritizedChoice : public Ope::Visitor
+{
+    IsPrioritizedChoice() : result_(false) {}
+
+    void visit(PrioritizedChoice& /*ope*/) override {
+        result_ = true;
+    }
+
+    static bool check(Ope& ope) {
+        IsPrioritizedChoice vis;
+        ope.accept(vis);
+        return vis.result_;
+    }
+
+private:
+    bool result_;
 };
 
 /*
@@ -2509,9 +2591,7 @@ public:
 
     bool is_token() const {
         std::call_once(is_token_init_, [this]() {
-            TokenChecker vis;
-            get_core_operator()->accept(vis);
-            is_token_ = vis.is_token();
+            is_token_ = TokenChecker::is_token(*get_core_operator());
         });
         return is_token_;
     }
@@ -2566,18 +2646,18 @@ private:
  */
 
 inline size_t parse_literal(const char* s, size_t n, SemanticValues& sv, Context& c, any& dt,
-        const std::string& lit, bool& init_is_word, bool& is_word)
+        const std::string& lit, bool& init_is_word, bool& is_word, bool ignore_case)
 {
     size_t i = 0;
     for (; i < lit.size(); i++) {
-        if (i >= n || s[i] != lit[i]) {
+        if (i >= n || (ignore_case ? (std::tolower(s[i]) != std::tolower(lit[i])) : (s[i] != lit[i]))) {
             c.set_error_pos(s);
             return static_cast<size_t>(-1);
         }
     }
 
     // Word check
-    static Context dummy_c(nullptr, lit.data(), lit.size(), 0, nullptr, nullptr, false, nullptr);
+    static Context dummy_c(nullptr, c.s, c.l, 0, nullptr, nullptr, false, nullptr);
     static SemanticValues dummy_sv;
     static any dummy_dt;
 
@@ -2614,7 +2694,7 @@ inline size_t parse_literal(const char* s, size_t n, SemanticValues& sv, Context
 
 inline size_t LiteralString::parse(const char* s, size_t n, SemanticValues& sv, Context& c, any& dt) const {
     c.trace("LiteralString", s, n, sv, dt);
-    return parse_literal(s, n, sv, c, dt, lit_, init_is_word_, is_word_);
+    return parse_literal(s, n, sv, c, dt, lit_, init_is_word_, is_word_, ignore_case_);
 }
 
 inline size_t TokenBoundary::parse(const char* s, size_t n, SemanticValues& sv, Context& c, any& dt) const {
@@ -2650,8 +2730,7 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
     // Macro reference
     // TODO: need packrat support
     if (outer_->is_macro) {
-        const auto& rule = *ope_;
-        return rule.parse(s, n, sv, c, dt);
+        return ope_->parse(s, n, sv, c, dt);
     }
 
     size_t len;
@@ -2672,13 +2751,18 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
 
         auto& chldsv = c.push();
 
-        const auto& rule = *ope_;
-        len = rule.parse(s, n, chldsv, c, dt);
+        len = ope_->parse(s, n, chldsv, c, dt);
 
         // Invoke action
         if (success(len)) {
             chldsv.s_ = s;
             chldsv.n_ = len;
+            chldsv.name_ = outer_->name;
+
+            if (!IsPrioritizedChoice::check(*ope_)) {
+                chldsv.choice_count_ = 0;
+                chldsv.choice_ = 0;
+            }
 
             try {
                 a_val = reduce(chldsv, dt);
@@ -2697,6 +2781,7 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
     if (success(len)) {
         if (!outer_->ignoreSemanticValue) {
             sv.emplace_back(val);
+            sv.tags.emplace_back(str2tag(outer_->name.c_str()));
         }
     } else {
         if (outer_->error_message) {
@@ -2764,7 +2849,7 @@ inline size_t BackReference::parse(const char* s, size_t n, SemanticValues& sv, 
             const auto& lit = captures.at(name_);
             auto init_is_word = false;
             auto is_word = false;
-            return parse_literal(s, n, sv, c, dt, lit, init_is_word, is_word);
+            return parse_literal(s, n, sv, c, dt, lit, init_is_word, is_word, false);
         }
         ++it;
     }
@@ -2831,6 +2916,9 @@ inline void DetectLeftRecursion::visit(Reference& ope) {
         refs_.insert(ope.name_);
         if (ope.rule_) {
             ope.rule_->accept(*this);
+            if (done_ == false) {
+                return;
+            }
         }
     }
     done_ = true;
@@ -2958,7 +3046,7 @@ private:
                                seq(g["BeginTok"], g["Expression"], g["EndTok"]),
                                seq(g["BeginCapScope"], g["Expression"], g["EndCapScope"]),
                                seq(g["BeginCap"], g["Expression"], g["EndCap"]),
-                               g["BackRef"], g["Literal"], g["Class"], g["DOT"]);
+                               g["BackRef"], g["LiteralI"], g["Literal"], g["Class"], g["DOT"]);
 
         g["Identifier"] <= seq(g["IdentCont"], g["Spacing"]);
         g["IdentCont"]  <= seq(g["IdentStart"], zom(g["IdentRest"]));
@@ -2967,6 +3055,9 @@ private:
         g["IdentStart"] <= cho(cls("a-zA-Z_%"), cls(range));
 
         g["IdentRest"]  <= cho(g["IdentStart"], cls("0-9"));
+
+        g["LiteralI"]   <= cho(seq(cls("'"), tok(zom(seq(npd(cls("'")), g["Char"]))), lit("'i"), g["Spacing"]),
+                               seq(cls("\""), tok(zom(seq(npd(cls("\"")), g["Char"]))), lit("\"i"), g["Spacing"]));
 
         g["Literal"]    <= cho(seq(cls("'"), tok(zom(seq(npd(cls("'")), g["Char"]))), cls("'"), g["Spacing"]),
                                seq(cls("\""), tok(zom(seq(npd(cls("\"")), g["Char"]))), cls("\""), g["Spacing"]));
@@ -3167,19 +3258,22 @@ private:
         g["IdentCont"] = [](const SemanticValues& sv) {
             return std::string(sv.c_str(), sv.length());
         };
-
         g["IdentStart"] = [](const SemanticValues& /*sv*/) {
             return std::string();
         };
-
         g["IdentRest"] = [](const SemanticValues& /*sv*/) {
             return std::string();
         };
 
+        g["LiteralI"] = [](const SemanticValues& sv) {
+            const auto& tok = sv.tokens.front();
+            return liti(resolve_escape_sequence(tok.first, tok.second));
+        };
         g["Literal"] = [](const SemanticValues& sv) {
             const auto& tok = sv.tokens.front();
             return lit(resolve_escape_sequence(tok.first, tok.second));
         };
+
         g["Class"] = [](const SemanticValues& sv) {
             auto ranges = sv.transform<std::pair<char32_t, char32_t>>();
             return cls(ranges);
@@ -3339,6 +3433,14 @@ private:
 
         // Automatic whitespace skipping
         if (grammar.count(WHITESPACE_DEFINITION_NAME)) {
+            for (auto& x: grammar) {
+                auto& rule = x.second;
+                auto ope = rule.get_core_operator();
+                if (IsLiteralToken::check(*ope)) {
+                    rule <= tok(ope);
+                }
+            }
+
             auto& rule = (*data.grammar)[start];
             rule.whitespaceOpe = wsp((*data.grammar)[WHITESPACE_DEFINITION_NAME].get_core_operator());
         }
@@ -3359,30 +3461,19 @@ private:
  *  AST
  *---------------------------------------------------------------------------*/
 
-const int AstDefaultTag = -1;
-
-#ifndef PEGLIB_NO_CONSTEXPR_SUPPORT
-inline constexpr unsigned int str2tag(const char* str, int h = 0) {
-    return !str[h] ? 5381 : (str2tag(str, h + 1) * 33) ^ static_cast<unsigned char>(str[h]);
-}
-
-namespace udl {
-inline constexpr unsigned int operator "" _(const char* s, size_t) {
-    return str2tag(s);
-}
-}
-#endif
-
 template <typename Annotation>
 struct AstBase : public Annotation
 {
     AstBase(const char* a_path, size_t a_line, size_t a_column,
-            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const char* a_name, size_t a_position, size_t a_length,
+            size_t a_choice_count, size_t a_choice,
             const std::vector<std::shared_ptr<AstBase>>& a_nodes)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(a_choice_count)
         , choice(a_choice)
         , original_name(a_name)
@@ -3397,12 +3488,15 @@ struct AstBase : public Annotation
     {}
 
     AstBase(const char* a_path, size_t a_line, size_t a_column,
-            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const char* a_name, size_t a_position, size_t a_length,
+            size_t a_choice_count, size_t a_choice,
             const std::string& a_token)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(a_choice_count)
         , choice(a_choice)
         , original_name(a_name)
@@ -3417,11 +3511,14 @@ struct AstBase : public Annotation
     {}
 
     AstBase(const AstBase& ast, const char* a_original_name,
+            size_t a_position, size_t a_length,
             size_t a_original_choice_count, size_t a_original_choise)
         : path(ast.path)
         , line(ast.line)
         , column(ast.column)
         , name(ast.name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(ast.choice_count)
         , choice(ast.choice)
         , original_name(a_original_name)
@@ -3442,6 +3539,8 @@ struct AstBase : public Annotation
     const size_t                      column;
 
     const std::string                 name;
+    size_t                            position;
+    size_t                            length;
     const size_t                      choice_count;
     const size_t                      choice;
     const std::string                 original_name;
@@ -3456,7 +3555,7 @@ struct AstBase : public Annotation
     const std::string                 token;
 
     std::vector<std::shared_ptr<AstBase<Annotation>>> nodes;
-    std::shared_ptr<AstBase<Annotation>>              parent;
+    std::weak_ptr<AstBase<Annotation>>                parent;
 };
 
 template <typename T>
@@ -3515,7 +3614,8 @@ struct AstOptimizer
         if (opt && original->nodes.size() == 1) {
             auto child = optimize(original->nodes[0], parent);
             return std::make_shared<T>(
-                *child, original->name.c_str(), original->choice_count, original->choice);
+                *child, original->name.c_str(), original->choice_count,
+                original->position, original->length, original->choice);
         }
 
         auto ast = std::make_shared<T>(*original);
@@ -3707,13 +3807,13 @@ public:
                     if (rule.is_token()) {
                         return std::make_shared<T>(
                             sv.path, line.first, line.second,
-                            name.c_str(), sv.choice_count(), sv.choice(),
+                            name.c_str(), std::distance(sv.ss, sv.c_str()), sv.length(), sv.choice_count(), sv.choice(),
                             sv.token());
                     }
 
                     auto ast = std::make_shared<T>(
                         sv.path, line.first, line.second,
-                        name.c_str(), sv.choice_count(), sv.choice(),
+                        name.c_str(), std::distance(sv.ss, sv.c_str()), sv.length(), sv.choice_count(), sv.choice(),
                         sv.transform<std::shared_ptr<T>>());
 
                     for (auto node: ast->nodes) {
@@ -5388,9 +5488,15 @@ inline std::vector<std::string> split(const std::string &str,
     if (i != prev) {
       retVal.emplace_back(str.substr(prev, i - prev));
     }
+    else {
+      retVal.emplace_back("");
+    }
   }
   if ((prev > 0) && (prev < str.size())) {
     retVal.emplace_back(str.substr(prev, str.size() - prev));
+  }
+  else if (prev > 0) {
+    retVal.emplace_back("");
   }
   return retVal;
 }
@@ -5465,7 +5571,7 @@ inline cluon::data::TimeStamp convert(const std::chrono::system_clock::time_poin
 }
 
 /**
- * @return TimeStamp of now.
+ * @return TimeStamp of now from std::chrono::system_clock.
  */
 inline cluon::data::TimeStamp now() noexcept {
     return convert(std::chrono::system_clock::now());
@@ -5510,6 +5616,14 @@ inline cluon::data::TimeStamp now() noexcept {
     #include <sys/endian.h>
 #elif (defined(_WIN16) || defined(_WIN32) || defined(_WIN64))
     #if BYTE_ORDER == LITTLE_ENDIAN
+        // Add missing definitions for MinGW.
+        #ifndef htonll
+            #define htonll(x) ((1==htonl(1)) ? (x) : (((uint64_t)htonl((x) & 0xFFFFFFFFUL)) << 32) | htonl((uint32_t)((x) >> 32)))
+        #endif
+        #ifndef ntohll
+            #define ntohll(x) ((1==ntohl(1)) ? (x) : (((uint64_t)ntohl((x) & 0xFFFFFFFFUL)) << 32) | ntohl((uint32_t)((x) >> 32)))
+        #endif
+
         #define htobe16(x) htons(x)
         #define htole16(x) (x)
         #define be16toh(x) ntohs(x)
@@ -5884,7 +5998,7 @@ message myMessage.SubName [id = 1] {
 
 cluon::MessageParser mp;
 auto retVal = mp.parse(std::string(spec));
-if (retVal.second == cluon::MessageParser::MessageParserErrorCodes::NO_ERROR) {
+if (retVal.second == cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR) {
     auto listOfMessages = retVal.first;
     for (auto message : listOfMessages) {
         message.accept([](const cluon::MetaMessage &mm){ std::cout << "Message name = " << mm.messageName() <<
@@ -5895,7 +6009,7 @@ std::endl; });
 */
 class LIBCLUON_API MessageParser {
    public:
-    enum MessageParserErrorCodes : uint8_t { NO_ERROR = 0, SYNTAX_ERROR = 1, DUPLICATE_IDENTIFIERS = 2 };
+    enum MessageParserErrorCodes : uint8_t { NO_MESSAGEPARSER_ERROR = 0, SYNTAX_ERROR = 1, DUPLICATE_IDENTIFIERS = 2 };
 
    private:
     MessageParser(const MessageParser &) = delete;
@@ -5911,7 +6025,7 @@ class LIBCLUON_API MessageParser {
      *
      * @param input Message specification.
      * @return Pair: List of cluon::MetaMessages describing the specified messages and error code:
-     *         NO_ERROR: The given specification could be parsed successfully (list moght be non-empty).
+     *         NO_MESSAGEPARSER_ERROR: The given specification could be parsed successfully (list moght be non-empty).
      *         SYNTAX_ERROR: The given specification could not be parsed successfully (list is empty).
      *         DUPLICATE_IDENTIFIERS: The given specification contains ambiguous names or identifiers (list is empty).
      */
@@ -6085,6 +6199,29 @@ class LIBCLUON_API NotifyingPipeline {
 
     std::deque<T> m_pipeline{};
 };
+} // namespace cluon
+
+#endif
+/*
+ * Copyright (C) 2019  Christian Berger
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+#ifndef CLUON_IPV4TOOLS_HPP
+#define CLUON_IPV4TOOLS_HPP
+
+#include <string>
+
+namespace cluon {
+
+/**
+ * @return IPv4-formatted string for the given hostname or the empty string.
+ */
+std::string getIPv4FromHostname(const std::string &hostname) noexcept;
+
 } // namespace cluon
 
 #endif
@@ -7713,7 +7850,7 @@ std::cout << generatedMessageSpecification << std::endl;
 
 cluon::MessageParser mp;
 auto retVal = mp.parse(generatedMessageSpecification);
-std::cout << (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == retVal.second);
+std::cout << (cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR == retVal.second);
 \endcode
 */
 class LIBCLUON_API ToODVDVisitor {
@@ -8158,7 +8295,7 @@ message MyMessage [id = 123] {
 
 cluon::MessageParser mp;
 auto retVal = mp.parse(std::string(messageSpecification));
-if (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == retVal.second) {
+if (cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR == retVal.second) {
     cluon::GenericMessage gm;
     auto listOfMetaMessages = retVal.first;
     gm.createFrom(listOfMetaMessages[0], listOfMetaMessages);
@@ -8253,7 +8390,7 @@ message MyMessage [id = 123] {
 
 cluon::MessageParser mp;
 auto retVal = mp.parse(std::string(messageSpecification));
-if (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == retVal.second) {
+if (cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR == retVal.second) {
     cluon::GenericMessage gm;
     auto listOfMetaMessages = retVal.first;
     gm.createFrom(listOfMetaMessages[0], listOfMetaMessages);
@@ -9740,7 +9877,7 @@ inline std::pair<std::vector<MetaMessage>, MessageParser::MessageParserErrorCode
                 std::vector<int32_t> tmpNumericalFieldIdentifiers{};
                 if (check4UniqueFieldNames(*ast, tmpPrefix, tmpMessageNames, tmpFieldNames, tmpNumericalMessageIdentifiers, tmpNumericalFieldIdentifiers)) {
                     transform2MetaMessages(*ast, listOfMetaMessages);
-                    retVal = {listOfMetaMessages, MessageParserErrorCodes::NO_ERROR};
+                    retVal = {listOfMetaMessages, MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR};
                 } else {
                     retVal = {listOfMetaMessages, MessageParserErrorCodes::DUPLICATE_IDENTIFIERS};
                 }
@@ -9804,6 +9941,87 @@ inline TerminateHandler::TerminateHandler() noexcept {
 
 } // namespace cluon
 /*
+ * Copyright (C) 2019  Christian Berger
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+//#include "cluon/IPv4Tools.hpp"
+
+// clang-format off
+#ifdef WIN32
+    #include <Winsock2.h> // for WSAStartUp
+    #include <ws2tcpip.h>
+    #include <iostream>
+#else
+    #include <arpa/inet.h>
+    #include <netdb.h>
+
+    #if defined(BSD)
+        #include <netinet/in.h>
+        #include <sys/socket.h>
+    #endif
+#endif
+// clang-format on
+
+#include <cstring>
+
+namespace cluon {
+
+inline std::string getIPv4FromHostname(const std::string &hostname) noexcept {
+#ifdef WIN32
+    // Load Winsock 2.2 DLL.
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "[cluon::getIPv4FromHostname] Error while calling WSAStartUp: " << WSAGetLastError() << std::endl;
+    }
+#endif
+    std::string result{""};
+    if (!hostname.empty()) {
+        struct addrinfo hint;
+        {
+            std::memset(&hint, 1, sizeof(struct addrinfo));
+            hint.ai_flags = AI_CANONNAME;
+            hint.ai_family = AF_INET;
+            hint.ai_socktype = 0;
+            hint.ai_protocol = 0;
+            hint.ai_addrlen = 0;
+            hint.ai_canonname = nullptr;
+            hint.ai_addr = nullptr;
+            hint.ai_next = nullptr;
+        }
+
+        struct addrinfo *listOfHosts{nullptr};
+        if (0 == getaddrinfo(hostname.c_str(), nullptr, &hint, &listOfHosts)) {
+            for(struct addrinfo *e = listOfHosts; nullptr != listOfHosts; listOfHosts = listOfHosts->ai_next) {
+                if (nullptr != e) {
+                    if (AF_INET == e->ai_family) {
+                        struct sockaddr_in *sinp = reinterpret_cast<struct sockaddr_in*>(e->ai_addr);
+                        char buf[INET_ADDRSTRLEN];
+                        const char *addr = inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
+                        if ( (nullptr != addr) && (result.empty()) ) {
+                            result = std::string(addr);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (nullptr != listOfHosts) {
+            freeaddrinfo(listOfHosts);
+        }
+    }
+#ifdef WIN32
+    WSACleanup();
+#endif
+    return result;
+}
+
+} // namespace cluon
+/*
  * Copyright (C) 2017-2018  Christian Berger
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -9812,6 +10030,7 @@ inline TerminateHandler::TerminateHandler() noexcept {
  */
 
 //#include "cluon/UDPSender.hpp"
+//#include "cluon/IPv4Tools.hpp"
 //#include "cluon/UDPPacketSizeConstraints.hpp"
 
 // clang-format off
@@ -9838,7 +10057,7 @@ inline UDPSender::UDPSender(const std::string &sendToAddress, uint16_t sendToPor
     : m_socketMutex()
     , m_sendToAddress() {
     // Decompose given address into tokens to check validity with numerical IPv4 address.
-    std::string tmp{sendToAddress};
+    std::string tmp{cluon::getIPv4FromHostname(sendToAddress)};
     std::replace(tmp.begin(), tmp.end(), '.', ' ');
     std::istringstream sstr{tmp};
     std::vector<int> sendToAddressTokens{std::istream_iterator<int>(sstr), std::istream_iterator<int>()};
@@ -9941,6 +10160,7 @@ inline std::pair<ssize_t, int32_t> UDPSender::send(std::string &&data) const noe
  */
 
 //#include "cluon/UDPReceiver.hpp"
+//#include "cluon/IPv4Tools.hpp"
 //#include "cluon/TerminateHandler.hpp"
 //#include "cluon/UDPPacketSizeConstraints.hpp"
 
@@ -9955,6 +10175,10 @@ inline std::pair<ssize_t, int32_t> UDPSender::send(std::string &&data) const noe
 
     #include <iostream>
 #else
+    #ifdef __linux__
+        #include <linux/sockios.h>
+    #endif
+
     #include <arpa/inet.h>
     #include <sys/ioctl.h>
     #include <sys/socket.h>
@@ -9990,7 +10214,7 @@ inline UDPReceiver::UDPReceiver(const std::string &receiveFromAddress,
     , m_readFromSocketThread()
     , m_delegate(std::move(delegate)) {
     // Decompose given address string to check validity with numerical IPv4 address.
-    std::string tmp{receiveFromAddress};
+    std::string tmp{cluon::getIPv4FromHostname(receiveFromAddress)};
     std::replace(tmp.begin(), tmp.end(), '.', ' ');
     std::istringstream sstr{tmp};
     std::vector<int> receiveFromAddressTokens{std::istream_iterator<int>(sstr), std::istream_iterator<int>()};
@@ -10350,6 +10574,7 @@ inline void UDPReceiver::readFromSocket() noexcept {
  */
 
 //#include "cluon/TCPConnection.hpp"
+//#include "cluon/IPv4Tools.hpp"
 //#include "cluon/TerminateHandler.hpp"
 
 // clang-format off
@@ -10357,6 +10582,10 @@ inline void UDPReceiver::readFromSocket() noexcept {
     #include <errno.h>
     #include <iostream>
 #else
+    #ifdef __linux__
+        #include <linux/sockios.h>
+    #endif
+
     #include <arpa/inet.h>
     #include <sys/ioctl.h>
     #include <sys/socket.h>
@@ -10392,7 +10621,8 @@ inline TCPConnection::TCPConnection(const std::string &address,
     : m_newDataDelegate(std::move(newDataDelegate))
     , m_connectionLostDelegate(std::move(connectionLostDelegate)) {
     // Decompose given address string to check validity with numerical IPv4 address.
-    std::string tmp{address};
+    std::string resolvedHostname{cluon::getIPv4FromHostname(address)};
+    std::string tmp{resolvedHostname};
     std::replace(tmp.begin(), tmp.end(), '.', ' ');
     std::istringstream sstr{tmp};
     std::vector<int> addressTokens{std::istream_iterator<int>(sstr), std::istream_iterator<int>()};
@@ -10401,10 +10631,10 @@ inline TCPConnection::TCPConnection(const std::string &address,
         && !(std::end(addressTokens) != std::find_if(addressTokens.begin(), addressTokens.end(), [](int a) { return (a < 0) || (a > 255); })) && (0 < port)) {
         // Check for valid IP address.
         struct sockaddr_in tmpSocketAddress {};
-        const bool isValid = (0 < ::inet_pton(AF_INET, address.c_str(), &(tmpSocketAddress.sin_addr)));
+        const bool isValid = (0 < ::inet_pton(AF_INET, resolvedHostname.c_str(), &(tmpSocketAddress.sin_addr)));
         if (isValid) {
             std::memset(&m_address, 0, sizeof(m_address));
-            m_address.sin_addr.s_addr = ::inet_addr(address.c_str());
+            m_address.sin_addr.s_addr = ::inet_addr(resolvedHostname.c_str());
             m_address.sin_family      = AF_INET;
             m_address.sin_port        = htons(port);
 #ifdef WIN32
@@ -12037,7 +12267,7 @@ inline void FromMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::
 
 } // namespace cluon
 /*
- * Copyright (C) 2017-2018  Christian Berger
+ * Copyright (C) 2017-2019  Christian Berger
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -12078,9 +12308,9 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
             if (m.size() > 0) {
                 std::string match{m[0]};
                 std::vector<std::string> retVal = stringtoolbox::split(match, ':');
-                if ((retVal.size() == 1) || ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0))) {
+                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0) ) {
                     std::string keyOfNestedObject{stringtoolbox::trim(retVal[0])};
-                    keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[0];
+                    keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[1];
                     {
                         std::string suffix(m.suffix());
                         suffix   = stringtoolbox::trim(suffix);
@@ -12097,11 +12327,11 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
 
                     result[keyOfNestedObject] = kv;
                 }
-                if ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0)) {
+                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0) ) {
                     auto e = std::make_pair(stringtoolbox::trim(retVal[0]), stringtoolbox::trim(retVal[1]));
 
                     JSONKeyValue kv;
-                    kv.m_key = stringtoolbox::split(e.first, '"')[0];
+                    kv.m_key = stringtoolbox::split(e.first, '"')[1];
 
                     if ((e.second.size() > 0) && (e.second.at(0) == '"')) {
                         kv.m_type  = JSONConstants::STRING;
@@ -13356,7 +13586,7 @@ inline int32_t LCMToGenericMessage::setMessageSpecification(const std::string &m
 
     cluon::MessageParser mp;
     auto parsingResult = mp.parse(ms);
-    if (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == parsingResult.second) {
+    if (cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR == parsingResult.second) {
         m_listOfMetaMessages = parsingResult.first;
         for (const auto &mm : m_listOfMetaMessages) { m_scopeOfMetaMessages[mm.messageName()] = mm; }
         retVal = static_cast<int32_t>(m_listOfMetaMessages.size());
@@ -13989,7 +14219,7 @@ inline int32_t EnvelopeConverter::setMessageSpecification(const std::string &ms)
 
     cluon::MessageParser mp;
     auto parsingResult = mp.parse(ms);
-    if (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == parsingResult.second) {
+    if (cluon::MessageParser::MessageParserErrorCodes::NO_MESSAGEPARSER_ERROR == parsingResult.second) {
         m_listOfMetaMessages = parsingResult.first;
         for (const auto &mm : m_listOfMetaMessages) { m_scopeOfMetaMessages[mm.messageIdentifier()] = mm; }
         retVal = static_cast<int32_t>(m_listOfMetaMessages.size());
@@ -14266,17 +14496,17 @@ inline void Player::resetIterators() noexcept {
 
 inline void Player::computeInitialCacheLevelAndFillCache() noexcept {
     if (m_recFileValid && (m_index.size() > 0)) {
-        int64_t smallestSampleTimePoint = std::numeric_limits<int64_t>::max();
-        int64_t largestSampleTimePoint  = std::numeric_limits<int64_t>::min();
+        int64_t smallestSampleTimePoint = (std::numeric_limits<int64_t>::max)();
+        int64_t largestSampleTimePoint  = (std::numeric_limits<int64_t>::min)();
         for (auto it = m_index.begin(); it != m_index.end(); it++) {
-            smallestSampleTimePoint = std::min(smallestSampleTimePoint, it->first);
-            largestSampleTimePoint  = std::max(largestSampleTimePoint, it->first);
+            smallestSampleTimePoint = (std::min)(smallestSampleTimePoint, it->first);
+            largestSampleTimePoint  = (std::max)(largestSampleTimePoint, it->first);
         }
 
         const uint32_t ENTRIES_TO_READ_PER_SECOND_FOR_REALTIME_REPLAY
             = static_cast<uint32_t>(std::ceil(static_cast<float>(m_index.size()) * (static_cast<float>(Player::ONE_SECOND_IN_MICROSECONDS))
                                               / static_cast<float>(largestSampleTimePoint - smallestSampleTimePoint)));
-        m_desiredInitialLevel = std::max<uint32_t>(ENTRIES_TO_READ_PER_SECOND_FOR_REALTIME_REPLAY * Player::LOOK_AHEAD_IN_S, MIN_ENTRIES_FOR_LOOK_AHEAD);
+        m_desiredInitialLevel = (std::max<uint32_t>)(ENTRIES_TO_READ_PER_SECOND_FOR_REALTIME_REPLAY * Player::LOOK_AHEAD_IN_S, MIN_ENTRIES_FOR_LOOK_AHEAD);
 
         std::clog << "[cluon::Player]: Initializing cache with " << m_desiredInitialLevel << " entries." << std::endl;
 
@@ -14444,7 +14674,10 @@ inline void Player::seekTo(float ratio) noexcept {
                 m_currentEnvelopeToReplay++;
             }
         }
-        m_nextEntryToReadFromRecFile = m_previousEnvelopeAlreadyReplayed = m_currentEnvelopeToReplay;
+        try {
+            std::lock_guard<std::mutex> lck(m_indexMutex);
+            m_nextEntryToReadFromRecFile = m_previousEnvelopeAlreadyReplayed = m_currentEnvelopeToReplay;
+        } catch (...) {} // LCOV_EXCL_LINE
 
         // Refill cache.
         m_envelopeCache.clear();
@@ -14767,14 +15000,16 @@ inline std::pair<bool, cluon::data::TimeStamp> SharedMemory::getTimeStamp() noex
 #ifndef WIN32
     if ((retVal = isLocked())) {
         struct stat fileStatus;
-        fstat(m_fdForTimeStamping, &fileStatus);
+        auto r = fstat(m_fdForTimeStamping, &fileStatus);
+        if (0 == r) {
 #ifdef __APPLE__
-        sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_sec))
-                       .microseconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_nsec/1000));
+            sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_sec))
+                           .microseconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_nsec/1000));
 #else
-        sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtim.tv_sec))
-                       .microseconds(static_cast<int32_t>(fileStatus.st_mtim.tv_nsec/1000));
+            sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtim.tv_sec))
+                           .microseconds(static_cast<int32_t>(fileStatus.st_mtim.tv_nsec/1000));
 #endif
+        }
     }
 #endif
 
@@ -15616,7 +15851,8 @@ inline bool SharedMemory::validSysV() noexcept {
 /*
  * Boost Software License - Version 1.0
  *
- * Copyright 2015-2018 Kevin Wojniak
+ * Mustache v4.0
+ * Copyright 2015-2019 Kevin Wojniak
  *
  * Permission is hereby granted, free of charge, to any person or organization
  * obtaining a copy of the software and accompanying documentation covered by
@@ -15645,6 +15881,7 @@ inline bool SharedMemory::validSysV() noexcept {
 #define KAINJOW_MUSTACHE_HPP
 
 #include <cassert>
+#include <cctype>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -15658,11 +15895,11 @@ namespace mustache {
 template <typename string_type>
 string_type trim(const string_type& s) {
     auto it = s.begin();
-    while (it != s.end() && isspace(*it)) {
+    while (it != s.end() && std::isspace(*it)) {
         it++;
     }
     auto rit = s.rbegin();
-    while (rit.base() != it && isspace(*rit)) {
+    while (rit.base() != it && std::isspace(*rit)) {
         rit++;
     }
     return {it, rit.base()};
@@ -16038,6 +16275,7 @@ const string_type delimiter_set<string_type>::default_end(2, '}');
 template <typename string_type>
 class basic_context {
 public:
+    virtual ~basic_context() = default;
     virtual void push(const basic_data<string_type>* data) = 0;
     virtual void pop() = 0;
 
@@ -16062,7 +16300,7 @@ public:
     virtual void pop() override {
         items_.erase(items_.begin());
     }
-    
+
     virtual const basic_data<string_type>* get(const string_type& name) const override {
         // process {{.}} name
         if (name.size() == 1 && name.at(0) == '.') {
@@ -16113,11 +16351,34 @@ private:
 };
 
 template <typename string_type>
+class line_buffer_state {
+public:
+    string_type data;
+    bool contained_section_tag = false;
+
+    bool is_empty_or_contains_only_whitespace() const {
+        for (const auto ch : data) {
+            // don't look at newlines
+            if (ch != ' ' && ch != '\t') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void clear() {
+        data.clear();
+        contained_section_tag = false;
+    }
+};
+
+template <typename string_type>
 class context_internal {
 public:
     basic_context<string_type>& ctx;
     delimiter_set<string_type> delim_set;
-    
+    line_buffer_state<string_type> line_buffer;
+
     context_internal(basic_context<string_type>& a_ctx)
         : ctx(a_ctx)
     {
@@ -16185,19 +16446,19 @@ public:
         skip,
     };
     using walk_callback = std::function<walk_control(component&)>;
-    
+
     component() {}
     component(const string_type& t, string_size_type p) : text(t), position(p) {}
-    
+
     bool is_text() const {
         return tag.type == tag_type::text;
     }
-    
+
     bool is_newline() const {
         return is_text() && ((text.size() == 2 && text[0] == '\r' && text[1] == '\n') ||
         (text.size() == 1 && (text[0] == '\n' || text[0] == '\r')));
     }
-    
+
     bool is_non_newline_whitespace() const {
         return is_text() && !is_newline() && text.size() == 1 && (text[0] == ' ' || text[0] == '\t');
     }
@@ -16209,7 +16470,7 @@ public:
             }
         }
     }
-    
+
 private:
     walk_control walk(const walk_callback& callback) {
         walk_control control{callback(*this)};
@@ -16220,7 +16481,9 @@ private:
         }
         for (auto& child : children) {
             control = child.walk(callback);
-            assert(control == walk_control::walk);
+            if (control == walk_control::stop) {
+                return control;
+            }
         }
         return control;
     }
@@ -16238,19 +16501,19 @@ private:
     void parse(const string_type& input, context_internal<string_type>& ctx, component<string_type>& root_component, string_type& error_message) const {
         using string_size_type = typename string_type::size_type;
         using streamstring = std::basic_ostringstream<typename string_type::value_type>;
-        
+
         const string_type brace_delimiter_end_unescaped(3, '}');
         const string_size_type input_size{input.size()};
 
         bool current_delimiter_is_brace{ctx.delim_set.is_default()};
-        
+
         std::vector<component<string_type>*> sections{&root_component};
         std::vector<string_size_type> section_starts;
         string_type current_text;
         string_size_type current_text_position = -1;
-        
+
         current_text.reserve(input_size);
-        
+
         const auto process_current_text = [&current_text, &current_text_position, &sections]() {
             if (!current_text.empty()) {
                 const component<string_type> comp{current_text, current_text_position};
@@ -16259,7 +16522,7 @@ private:
                 current_text_position = -1;
             }
         };
-        
+
         const std::vector<string_type> whitespace{
             string_type(1, '\r') + string_type(1, '\n'),
             string_type(1, '\n'),
@@ -16267,10 +16530,10 @@ private:
             string_type(1, ' '),
             string_type(1, '\t'),
         };
-        
+
         for (string_size_type input_position = 0; input_position != input_size;) {
             bool parse_tag = false;
-            
+
             if (input.compare(input_position, ctx.delim_set.begin.size(), ctx.delim_set.begin) == 0) {
                 process_current_text();
 
@@ -16285,12 +16548,12 @@ private:
                         const component<string_type> comp{whitespace_text, input_position};
                         sections.back()->children.push_back(comp);
                         input_position += whitespace_text.size();
-                        
+
                         parsed_whitespace = true;
                         break;
                     }
                 }
-                
+
                 if (!parsed_whitespace) {
                     if (current_text.empty()) {
                         current_text_position = input_position;
@@ -16299,14 +16562,14 @@ private:
                     input_position++;
                 }
             }
-            
+
             if (!parse_tag) {
                 continue;
             }
-            
+
             // Find the next tag start delimiter
             const string_size_type tag_location_start = input_position;
-            
+
             // Find the next tag end delimiter
             string_size_type tag_contents_location{tag_location_start + ctx.delim_set.begin.size()};
             const bool tag_is_unescaped_var{current_delimiter_is_brace && tag_location_start != (input_size - 2) && input.at(tag_contents_location) == ctx.delim_set.begin.at(0)};
@@ -16322,7 +16585,7 @@ private:
                 error_message.assign(ss.str());
                 return;
             }
-            
+
             // Parse tag
             const string_type tag_contents{trim(string_type{input, tag_contents_location, tag_location_end - tag_contents_location})};
             component<string_type> comp;
@@ -16342,10 +16605,10 @@ private:
             }
             comp.position = tag_location_start;
             sections.back()->children.push_back(comp);
-            
+
             // Start next search after this tag
             input_position = tag_location_end + current_tag_delimiter_end_size;
-            
+
             // Push or pop sections
             if (comp.tag.is_section_begin()) {
                 sections.push_back(&sections.back()->children.back());
@@ -16362,9 +16625,9 @@ private:
                 section_starts.pop_back();
             }
         }
-        
+
         process_current_text();
-        
+
         // Check for sections without an ending tag
         root_component.walk_children([&error_message](component<string_type>& comp) -> typename component<string_type>::walk_control {
             if (!comp.tag.is_section_begin()) {
@@ -16383,17 +16646,17 @@ private:
             return;
         }
     }
-    
+
     bool is_set_delimiter_valid(const string_type& delimiter) const {
         // "Custom delimiters may not contain whitespace or the equals sign."
         for (const auto ch : delimiter) {
-            if (ch == '=' || isspace(ch)) {
+            if (ch == '=' || std::isspace(ch)) {
                 return false;
             }
         }
         return true;
     }
-    
+
     bool parse_set_delimiter_tag(const string_type& contents, delimiter_set<string_type>& delimiter_set) const {
         // Smallest legal tag is "=X X="
         if (contents.size() < 5) {
@@ -16418,7 +16681,7 @@ private:
         delimiter_set.end = end;
         return true;
     }
-    
+
     void parse_tag_contents(bool is_unescaped_var, const string_type& contents, mstch_tag<string_type>& tag) const {
         if (is_unescaped_var) {
             tag.type = tag_type::unescaped_variable;
@@ -16476,7 +16739,7 @@ public:
     bool is_valid() const {
         return error_message_.empty();
     }
-    
+
     const string_type& error_message() const {
         return error_message_;
     }
@@ -16493,7 +16756,7 @@ public:
         });
         return stream;
     }
-    
+
     string_type render(const basic_data<string_type>& data) {
         std::basic_ostringstream<typename string_type::value_type> ss;
         return render(data, ss).str();
@@ -16530,14 +16793,10 @@ private:
         : escape_(html_escape<string_type>)
     {
     }
-    
+
     basic_mustache(const string_type& input, context_internal<string_type>& ctx)
         : basic_mustache() {
         parser<string_type> parser{input, ctx, root_component_, error_message_};
-    }
-    
-    void walk(const typename component<string_type>::walk_callback& callback) {
-        root_component_.walk_children(callback);
     }
 
     string_type render(context_internal<string_type>& ctx) {
@@ -16548,18 +16807,47 @@ private:
         return ss.str();
     }
 
-    void render(const render_handler& handler, context_internal<string_type>& ctx) {
-        walk([&handler, &ctx, this](component<string_type>& comp) -> typename component<string_type>::walk_control {
+    void render(const render_handler& handler, context_internal<string_type>& ctx, bool root_renderer = true) {
+        root_component_.walk_children([&handler, &ctx, this](component<string_type>& comp) -> typename component<string_type>::walk_control {
             return render_component(handler, ctx, comp);
         });
+        // process the last line, but only for the top-level renderer
+        if (root_renderer) {
+            render_current_line(handler, ctx, nullptr);
+        }
+    }
+
+    void render_current_line(const render_handler& handler, context_internal<string_type>& ctx, const component<string_type>* comp) const {
+        // We're at the end of a line, so check the line buffer state to see
+        // if the line had tags in it, and also if the line is now empty or
+        // contains whitespace only. if this situation is true, skip the line.
+        bool output = true;
+        if (ctx.line_buffer.contained_section_tag && ctx.line_buffer.is_empty_or_contains_only_whitespace()) {
+            output = false;
+        }
+        if (output) {
+            handler(ctx.line_buffer.data);
+            if (comp) {
+                handler(comp->text);
+            }
+        }
+        ctx.line_buffer.clear();
+    }
+
+    void render_result(context_internal<string_type>& ctx, const string_type& text) const {
+        ctx.line_buffer.data.append(text);
     }
 
     typename component<string_type>::walk_control render_component(const render_handler& handler, context_internal<string_type>& ctx, component<string_type>& comp) {
         if (comp.is_text()) {
-            handler(comp.text);
+            if (comp.is_newline()) {
+                render_current_line(handler, ctx, &comp);
+            } else {
+                render_result(ctx, comp.text);
+            }
             return component<string_type>::walk_control::walk;
         }
-        
+
         const mstch_tag<string_type>& tag{comp.tag};
         const basic_data<string_type>* var = nullptr;
         switch (tag.type) {
@@ -16589,13 +16877,13 @@ private:
                 return component<string_type>::walk_control::skip;
             case tag_type::partial:
                 if ((var = ctx.ctx.get_partial(tag.name)) != nullptr && (var->is_partial() || var->is_string())) {
-                    const auto partial_result = var->is_partial() ? var->partial_value()() : var->string_value();
+                    const auto& partial_result = var->is_partial() ? var->partial_value()() : var->string_value();
                     basic_mustache tmpl{partial_result};
                     tmpl.set_custom_escape(escape_);
                     if (!tmpl.is_valid()) {
                         error_message_ = tmpl.error_message();
                     } else {
-                        tmpl.render(handler, ctx);
+                        tmpl.render(handler, ctx, false);
                         if (!tmpl.is_valid()) {
                             error_message_ = tmpl.error_message();
                         }
@@ -16611,7 +16899,7 @@ private:
             default:
                 break;
         }
-        
+
         return component<string_type>::walk_control::walk;
     }
 
@@ -16620,7 +16908,7 @@ private:
         unescape,
         optional,
     };
-    
+
     bool render_lambda(const render_handler& handler, const basic_data<string_type>* var, context_internal<string_type>& ctx, render_lambda_escape escape, const string_type& text, bool parse_with_same_context) {
         const typename basic_renderer<string_type>::type2 render2 = [this, &ctx, parse_with_same_context, escape](const string_type& text, bool escaped) {
             const auto process_template = [this, &ctx, escape, escaped](basic_mustache& tmpl) -> string_type {
@@ -16661,17 +16949,18 @@ private:
         };
         if (var->is_lambda2()) {
             const basic_renderer<string_type> renderer{render, render2};
-            handler(var->lambda2_value()(text, renderer));
+            render_result(ctx, var->lambda2_value()(text, renderer));
         } else {
-            handler(render(var->lambda_value()(text)));
+            render_current_line(handler, ctx, nullptr);
+            render_result(ctx, render(var->lambda_value()(text)));
         }
         return error_message_.empty();
     }
-    
+
     bool render_variable(const render_handler& handler, const basic_data<string_type>* var, context_internal<string_type>& ctx, bool escaped) {
         if (var->is_string()) {
-            const auto varstr = var->string_value();
-            handler(escaped ? escape_(varstr) : varstr);
+            const auto& varstr = var->string_value();
+            render_result(ctx, escaped ? escape_(varstr) : varstr);
         } else if (var->is_lambda()) {
             const render_lambda_escape escape_opt = escaped ? render_lambda_escape::escape : render_lambda_escape::unescape;
             return render_lambda(handler, var, ctx, escape_opt, {}, false);
@@ -16691,14 +16980,32 @@ private:
         };
         if (var && var->is_non_empty_list()) {
             for (const auto& item : var->list_value()) {
+                // account for the section begin tag
+                ctx.line_buffer.contained_section_tag = true;
+
                 const context_pusher<string_type> ctxpusher{ctx, &item};
                 incomp.walk_children(callback);
+
+                // ctx may have been cleared. account for the section end tag
+                ctx.line_buffer.contained_section_tag = true;
             }
         } else if (var) {
+            // account for the section begin tag
+            ctx.line_buffer.contained_section_tag = true;
+
             const context_pusher<string_type> ctxpusher{ctx, var};
             incomp.walk_children(callback);
+
+            // ctx may have been cleared. account for the section end tag
+            ctx.line_buffer.contained_section_tag = true;
         } else {
+            // account for the section begin tag
+            ctx.line_buffer.contained_section_tag = true;
+
             incomp.walk_children(callback);
+
+            // ctx may have been cleared. account for the section end tag
+            ctx.line_buffer.contained_section_tag = true;
         }
     }
 
@@ -17967,7 +18274,7 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
                             // Extract timestamps.
                             std::vector<std::string> timeStampsWithHeader;
                             {
-                                // Skip senderStamp (as it is in file name) and serialzedData.
+                                // Skip senderStamp (as it is in file name) and serializedData.
                                 cluon::ToCSVVisitor csv(';', true, { {1,false}, {2,false}, {3,true}, {4,true}, {5,true}, {6,false} });
                                 env.accept(csv);
                                 timeStampsWithHeader = stringtoolbox::split(csv.csv(), '\n');
